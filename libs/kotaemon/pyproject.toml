@@ -56,6 +56,10 @@ dependencies = [
     "python-decouple", # for theflow
     "python-docx>=1.1.0,<1.2",
     "python-dotenv>=1.0.1,<1.1",
+    # libmagic for the unstructured readers on Windows (no system package)
+    "python-magic-bin>=0.4.14; sys_platform == 'win32'",
+    # default PDF extraction OCRs pages that carry no text layer (scanned files)
+    "rapidocr-onnxruntime",
     "tenacity>=8.2.3,<8.3",
     "theflow>=0.8.6,<0.9.0",
     "trogon>=0.5.0,<0.6",
@@ -65,10 +69,7 @@ dependencies = [
 ]
 readme = "README.md"
 authors = [
-    { name = "@trducng", email = "john@cinnamon.is" },
-    { name = "@lone17", email = "ian@cinnamon.is" },
-    { name = "@taprosoft", email = "tadashi@cinnamon.is" },
-    { name = "@cin-albert", email = "albert@cinnamon.is" },
+    { name = "wangwuqiang2026", url = "https://github.com/wangwuqiang2026" },
 ]
 classifiers = [
     "Programming Language :: Python :: 3",

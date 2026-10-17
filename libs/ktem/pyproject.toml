@@ -32,12 +32,12 @@ dependencies = [
     "markdown>=3.6,<4",
     "tzlocal>=5.0",
     "mcp>=1.0.0",
+    # UI localization: translates display strings through an online service and
+    # caches the result (see ktem/utils/i18n.py).
+    "deep-translator>=1.11.4,<2",
 ]
 authors = [
-    { name = "@trducng", email = "john@cinnamon.is" },
-    { name = "@lone17", email = "ian@cinnamon.is" },
-    { name = "@taprosoft", email = "tadashi@cinnamon.is" },
-    { name = "@cin-albert", email = "albert@cinnamon.is" },
+    { name = "wangwuqiang2026", url = "https://github.com/wangwuqiang2026" },
 ]
 classifiers = [
     "Programming Language :: Python :: 3",

@@ -20,7 +20,16 @@ from sqlalchemy.orm import Session
 from theflow.settings import settings as flowsettings
 
 from ...utils.commands import WEB_SEARCH_COMMAND
+from ...utils.i18n import tr
 from ...utils.rate_limit import check_rate_limit
+from ...utils.selector import (
+    DEFAULT_SELECTOR_MODE,
+    SELECTOR_MODE_ALL,
+    SELECTOR_MODE_DISABLED,
+    SELECTOR_MODE_SELECT,
+    SELECTOR_STATE_SENTINEL,
+    resolve_selector_user_id,
+)
 from .utils import download_arxiv_pdf, is_arxiv_url
 
 KH_DEMO_MODE = getattr(flowsettings, "KH_DEMO_MODE", False)
@@ -494,9 +503,9 @@ class FileIndexPage(BasePage):
         for doc in docs:
             t = doc.metadata.get("type", "text")
             type_counts[t] = type_counts.get(t, 0) + 1
-        type_parts = [f"{c} {t}" for t, c in sorted(type_counts.items())]
+        type_parts = [f"{c} {tr(t.capitalize())}" for t, c in sorted(type_counts.items())]
         type_str = ", ".join(type_parts) if type_parts else "0"
-        header_md = f"**{total} chunks** ({type_str})"
+        header_md = f"**{tr('{} chunks').format(total)}** ({type_str})"
 
         # Render the chunks
         chunks_html: list[str] = []
@@ -515,10 +524,14 @@ class FileIndexPage(BasePage):
                     url=doc.metadata.get("image_origin", ""), text=doc.text
                 )
 
-            header_prefix = f"[{idx+1}/{total}]"
+            header_prefix = f"[{idx + 1}/{total}]"
             if doc.metadata.get("page_label"):
-                header_prefix += f" [Page {doc.metadata['page_label']}]"
-            badge = f' <span style="opacity:0.7;font-size:0.85em">({doc_type})</span>'
+                header_prefix += " "
+                header_prefix += tr("[Page {}]").format(doc.metadata["page_label"])
+            badge = (
+                ' <span style="opacity:0.7;font-size:0.85em">'
+                f"({tr(doc_type.capitalize())})</span>"
+            )
             header_prefix += badge
 
             chunks_html.append(
@@ -709,8 +722,10 @@ class FileIndexPage(BasePage):
                     quickUploadedEvent = (
                         self._app.chat_page.quick_file_upload.upload(
                             fn=lambda: gr.update(
-                                value="Please wait for the indexing process "
-                                "to complete before adding your question."
+                                value=tr(
+                                    "Please wait for the indexing process "
+                                    "to complete before adding your question."
+                                )
                             ),
                             outputs=self._app.chat_page.quick_file_upload_status,
                         )
@@ -748,7 +763,7 @@ class FileIndexPage(BasePage):
                             outputs=self._app.chat_page._indices_input[1],
                         )
                         .then(
-                            fn=lambda: gr.update(value="Indexing completed."),
+                            fn=lambda: gr.update(value=tr("Indexing completed.")),
                             outputs=self._app.chat_page.quick_file_upload_status,
                         )
                         .then(
@@ -768,8 +783,10 @@ class FileIndexPage(BasePage):
                 quickURLUploadedEvent = (
                     self._app.chat_page.quick_urls.submit(
                         fn=lambda: gr.update(
-                            value="Please wait for the indexing process "
-                            "to complete before adding your question."
+                            value=tr(
+                                "Please wait for the indexing process "
+                                "to complete before adding your question."
+                            )
                         ),
                         outputs=self._app.chat_page.quick_file_upload_status,
                     )
@@ -803,7 +820,7 @@ class FileIndexPage(BasePage):
                     inputs=self.quick_upload_state,
                     outputs=self._app.chat_page._indices_input[1],
                 ).then(
-                    fn=lambda: gr.update(value="Indexing completed."),
+                    fn=lambda: gr.update(value=tr("Indexing completed.")),
                     outputs=self._app.chat_page.quick_file_upload_status,
                 )
 
@@ -1075,7 +1092,7 @@ class FileIndexPage(BasePage):
         self.group_add_button.click(
             fn=lambda: [
                 gr.update(visible=False),
-                gr.update(value="### Add new group"),
+                gr.update(value=tr("### Add new group")),
                 gr.update(visible=True),
                 gr.update(value=""),
                 gr.update(value=[]),
@@ -1749,9 +1766,11 @@ class FileSelector(BasePage):
         self.on_building_ui()
 
     def default(self):
+        # The mode must be one of SELECTOR_CHOICES; see ktem.utils.selector for
+        # why a mode outside that list silently disables retrieval.
         if self._app.f_user_management:
-            return "disabled", [], -1
-        return "disabled", [], 1
+            return DEFAULT_SELECTOR_MODE, [], SELECTOR_STATE_SENTINEL
+        return DEFAULT_SELECTOR_MODE, [], 1
 
     def on_building_ui(self):
         default_mode, default_selector, user_id = self.default()
@@ -1759,8 +1778,8 @@ class FileSelector(BasePage):
         self.mode = gr.Radio(
             value=default_mode,
             choices=[
-                ("Search All", "all"),
-                ("Search In File(s)", "select"),
+                ("Search All", SELECTOR_MODE_ALL),
+                ("Search In File(s)", SELECTOR_MODE_SELECT),
             ],
             container=False,
         )
@@ -1797,14 +1816,18 @@ class FileSelector(BasePage):
     def as_gradio_component(self):
         return [self.mode, self.selector, self.selector_user_id]
 
-    def get_selected_ids(self, components):
-        mode, selected, user_id = components[0], components[1], components[2]
+    def get_selected_ids(self, components, user_id: int | str | None = None):
+        mode, selected, selector_user_id = components[0], components[1], components[2]
+
+        # The selector's own state is stale in a fresh session; prefer the id the
+        # session passes down. See ktem.utils.selector.resolve_selector_user_id.
+        user_id = resolve_selector_user_id(user_id, selector_user_id)
         if user_id is None:
             return []
 
-        if mode == "disabled":
+        if mode == SELECTOR_MODE_DISABLED:
             return []
-        elif mode == "select":
+        elif mode == SELECTOR_MODE_SELECT:
             return selected
 
         file_ids = []

@@ -470,7 +470,9 @@ class FileIndex(BaseIndex):
                 stripped_settings[key[len(prefix) :]] = value
 
         # transform selected id
-        selected_ids: Optional[list[str]] = self._selector_ui.get_selected_ids(selected)
+        selected_ids: Optional[list[str]] = self._selector_ui.get_selected_ids(
+            selected, user_id
+        )
 
         retrievers = []
         for cls in self._retriever_pipeline_cls:

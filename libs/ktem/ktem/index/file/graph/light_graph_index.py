@@ -61,7 +61,7 @@ class LightRAGIndex(GraphRAGIndex):
     def get_retriever_pipelines(
         self, settings: dict, user_id: int, selected: Any = None
     ) -> list["BaseFileIndexRetriever"]:
-        file_ids = self._selector_ui.get_selected_ids(selected)
+        file_ids = self._selector_ui.get_selected_ids(selected, user_id)
         # retrieval settings
         prefix = f"index.options.{self.id}."
         search_type = settings.get(prefix + "search_type", "local")

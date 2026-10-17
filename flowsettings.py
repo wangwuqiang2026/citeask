@@ -15,6 +15,8 @@ this_dir = Path(this_file).parent
 
 # change this if your app use a different name
 KH_PACKAGE_NAME = "kotaemon_app"
+# Display name shown in the window title, sidebar and login/help pages.
+KH_APP_NAME = config("KH_APP_NAME", default="引问")
 
 KH_APP_VERSION = config("KH_APP_VERSION", None)
 if not KH_APP_VERSION:
@@ -62,10 +64,38 @@ KH_ZIP_INPUT_DIR.mkdir(parents=True, exist_ok=True)
 os.environ["HF_HOME"] = str(KH_APP_DATA_DIR / "huggingface")
 os.environ["HF_HUB_CACHE"] = str(KH_APP_DATA_DIR / "huggingface")
 
+# FastEmbed caches its ONNX models under `tempfile.gettempdir()` by default. That
+# location changes when TMP is redirected (e.g. inside a sandbox) and can be wiped
+# by cleanup tools, which would re-download a ~1GB model. Pin it to app data.
+os.environ.setdefault("FASTEMBED_CACHE_PATH", str(KH_APP_DATA_DIR / "fastembed_cache"))
+
 # doc directory
 KH_DOC_DIR = this_dir / "docs"
 
 KH_MODE = "dev"
+# UI language for the Gradio front-end. This fork defaults to Simplified Chinese
+# ("zh"); set KH_UI_LANGUAGE=en to get the original upstream strings back.
+KH_UI_LANGUAGE = config("KH_UI_LANGUAGE", default="zh")
+# Where the UI translations come from. Translations are produced at build time by
+# `deep_translator` (or by the chat model) and cached in
+# ktem_app_data/i18n/<lang>.json, so they are generated instead of hard-coded.
+# Backends: llm (default, reuses the configured chat model and preserves
+# Markdown), mymemory, google, libre. See MODIFICATIONS.md §3 for measurements.
+KH_UI_TRANSLATOR = config("KH_UI_TRANSLATOR", default="llm")
+# Translate strings missing from the catalog while starting up. Off by default:
+# the free services need ~2s per string, so building the catalog is an explicit
+# step (`python -m ktem.utils.i18n build`) and startup only reads the cache.
+KH_UI_TRANSLATE_MISSING = config(
+    "KH_UI_TRANSLATE_MISSING", default=False, cast=bool
+)
+# Language the chat model is asked to answer in. It follows the UI language by
+# default: the QA prompt ends with "Give answer in {lang}", so this single value
+# is what keeps the answers from being English on a Chinese UI. Override with the
+# Language dropdown in the chat settings, or set KH_ANSWER_LANGUAGE=en.
+KH_ANSWER_LANGUAGE = config(
+    "KH_ANSWER_LANGUAGE",
+    default=KH_UI_LANGUAGE if KH_UI_LANGUAGE in SUPPORTED_LANGUAGE_MAP else "en",
+)
 KH_SSO_ENABLED = config("KH_SSO_ENABLED", default=False, cast=bool)
 
 KH_FEATURE_CHAT_SUGGESTION = config(
@@ -342,7 +372,7 @@ SETTINGS_REASONING = {
     },
     "lang": {
         "name": "Language",
-        "value": "en",
+        "value": KH_ANSWER_LANGUAGE,
         "choices": [(lang, code) for code, lang in SUPPORTED_LANGUAGE_MAP.items()],
         "component": "dropdown",
     },
@@ -402,3 +432,77 @@ KH_INDICES = [
     },
     *GRAPHRAG_INDICES,
 ]
+
+# =============================================================================
+# 本地部署定制：DeepSeek 对话模型 + 本地 FastEmbed 向量模型
+# -----------------------------------------------------------------------------
+# 上游的 provider 默认项是按 env 状态推导出来的（例如没有 OpenAI key 时
+# google 会自动成为默认，且其 api_key 是占位字符串）。这里在最后显式注册
+# 本地这套并压平所有 default 标记，保证默认模型唯一且可用。
+#
+# 注意：模型池只在首次启动、对应数据库表为空时从本文件播种
+# （见 ktem/*/manager.py）。改完本文件若未生效，删除
+# ktem_app_data/user_data/sql.db 后重启即可。
+# =============================================================================
+
+# ---- 对话模型：DeepSeek（OpenAI 兼容接口） ----
+DEEPSEEK_API_KEY = config("DEEPSEEK_API_KEY", default="your-key")
+DEEPSEEK_API_BASE = config("DEEPSEEK_API_BASE", default="https://api.deepseek.com/v1")
+DEEPSEEK_CHAT_MODEL = config("DEEPSEEK_CHAT_MODEL", default="deepseek-chat")
+
+KH_LLMS["deepseek"] = {
+    "spec": {
+        "__type__": "kotaemon.llms.ChatOpenAI",
+        "temperature": 0,
+        "base_url": DEEPSEEK_API_BASE,
+        "api_key": DEEPSEEK_API_KEY,
+        "model": DEEPSEEK_CHAT_MODEL,
+        "timeout": 60,
+    },
+    "default": True,
+}
+
+# ---- 向量模型：本地 FastEmbed（无需 API key，首次使用自动下载模型） ----
+# 选型依据（同一套 30 题检索评测，见 MODIFICATIONS.md §9.4）：
+#   MiniLM-L12-v2  384 维  Hit@1 36.7% / MRR 0.589   ← 原默认
+#   mpnet-base-v2  768 维  Hit@1 60.0% / MRR 0.739   ← 现默认（最强且无需前缀）
+#   e5-large      1024 维  Hit@1 53.3% / MRR 0.683   ← 加 E5 前缀后仍不如上面
+# 若换成 E5 系列，必须同时设置 query_prefix="query: " / passage_prefix="passage: "，
+# 否则会明显掉分（实测 46.7% vs 53.3%）。
+KH_EMBEDDINGS["fast_embed"] = {
+    "spec": {
+        "__type__": "kotaemon.embeddings.FastEmbedEmbeddings",
+        "model_name": config(
+            "LOCAL_EMBEDDING_MODEL",
+            default="sentence-transformers/paraphrase-multilingual-mpnet-base-v2",
+        ),
+        "batch_size": 64,
+    },
+    "default": True,
+}
+
+# ---- 向量模型：通义（DashScope，OpenAI 兼容接口） ----
+# 与本地 FastEmbed 二选一：配了 DASHSCOPE_API_KEY 就用通义（免下载，省掉约 3.7GB 本地
+# 模型），没有 key 就自动回落到本地 FastEmbed。两者可随时在「资源 → 嵌入」里切换，
+# 但**换了向量模型必须重建索引**（维度不同），见 tools/reindex_corpus.py。
+DASHSCOPE_API_KEY = config("DASHSCOPE_API_KEY", default="")
+DASHSCOPE_API_BASE = config(
+    "DASHSCOPE_API_BASE", default="https://dashscope.aliyuncs.com/compatible-mode/v1"
+)
+KH_EMBEDDINGS["dashscope"] = {
+    "spec": {
+        "__type__": "kotaemon.embeddings.OpenAIEmbeddings",
+        "base_url": DASHSCOPE_API_BASE,
+        "api_key": DASHSCOPE_API_KEY,
+        "model": config("DASHSCOPE_EMBEDDING_MODEL", default="text-embedding-v3"),
+        "batch_size": 25,  # 通义单次请求的文本上限
+    },
+    "default": False,
+}
+
+# ---- 压平默认项：配了通义 key 走通义，否则走本地 FastEmbed ----
+for _name, _cfg in KH_LLMS.items():
+    _cfg["default"] = _name == "deepseek"
+_DEFAULT_EMBEDDING = "dashscope" if DASHSCOPE_API_KEY else "fast_embed"
+for _name, _cfg in KH_EMBEDDINGS.items():
+    _cfg["default"] = _name == _DEFAULT_EMBEDDING

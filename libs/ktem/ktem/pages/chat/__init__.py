@@ -1289,7 +1289,7 @@ class ChatPage(BasePage):
                 components = (selecteds[index.selector],)
             else:
                 components = tuple(selecteds[i] for i in index.selector)
-            if index_ui.get_selected_ids(components):
+            if index_ui.get_selected_ids(components, user_id):
                 return True
         return False
 
@@ -1316,9 +1316,19 @@ class ChatPage(BasePage):
         if chat_output:
             chat_state["app"]["regen"] = True
 
+        # A question with nothing to retrieve from silently yields "no evidence
+        # found", which reads like the document was not uploaded. Tell the user
+        # what is actually missing: an indexed file, or a choice of files.
+        has_selected_files = self._has_selected_files(user_id, *selecteds)
+        if not has_selected_files:
+            gr.Warning(
+                "当前没有可检索的文件：请先上传并等待索引完成；"
+                "如果检索范围选的是「在文件中搜索」，还需要在下拉框里勾选文件。"
+            )
+
         llm_query = prepare_llm_query(
             display_input,
-            has_selected_files=self._has_selected_files(user_id, *selecteds),
+            has_selected_files=has_selected_files,
             default_question=DEFAULT_QUESTION,
         )
 

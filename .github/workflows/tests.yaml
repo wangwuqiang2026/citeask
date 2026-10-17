@@ -18,8 +18,15 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
+          # kept in sync with the version that produced uv.lock
+          version: "0.11.13"
           python-version: "3.10"
           enable-cache: true
+
+      - name: Print environment
+        run: |
+          uv --version
+          uv python list --only-installed
 
       # llama-cpp-python has no wheel on every platform and is optional for this
       # project, so it is excluded from the install.

@@ -14,9 +14,11 @@ from kotaemon.loaders import (
     AzureAIDocumentIntelligenceLoader,
     DirectoryReader,
     DoclingReader,
+    DocxReader,
     HtmlReader,
     MathpixPDFReader,
     MhtmlReader,
+    OCRPDFReader,
     OCRReader,
     PaddleOCRVLReader,
     PandasExcelReader,
@@ -44,10 +46,18 @@ paddle_device = str(config("PADDLE_DEVICE", default="gpu"))
 paddle_struct_reader = PPStructureV3Reader(device=paddle_device)
 paddle_vl_reader = PaddleOCRVLReader(device=paddle_device)
 
+#: Reads the text layer page by page and OCRs the pages that have almost none,
+#: which is the common shape of a scanned PDF with a headings-only text layer.
+ocr_pdf_reader = OCRPDFReader()
+
 
 KH_DEFAULT_FILE_EXTRACTORS: dict[str, BaseReader] = {
     ".xlsx": PandasExcelReader(),
-    ".docx": unstructured,
+    # .docx goes through python-docx instead of unstructured: unstructured needs
+    # libmagic and, on this platform, still fails while fetching its own resources,
+    # which left every .docx silently unindexed (empty file list row, "no evidence
+    # found" on questions about the document).
+    ".docx": DocxReader(),
     ".pptx": unstructured,
     ".xls": unstructured,
     ".doc": unstructured,
@@ -58,7 +68,14 @@ KH_DEFAULT_FILE_EXTRACTORS: dict[str, BaseReader] = {
     ".jpg": unstructured,
     ".tiff": unstructured,
     ".tif": unstructured,
-    ".pdf": PDFThumbnailReader(),
+    # PDFThumbnailReader also indexes a page image per page; for a scanned file
+    # those images carry no text, so they cost retrieval slots without adding
+    # information. OCRPDFReader keeps the text layer and OCRs what is missing.
+    ".pdf": (
+        ocr_pdf_reader
+        if config("PDF_OCR_ENABLED", default=True, cast=bool)
+        else PDFThumbnailReader()
+    ),
     ".txt": TxtReader(),
     ".md": TxtReader(),
 }

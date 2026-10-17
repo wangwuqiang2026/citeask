@@ -38,6 +38,18 @@ class FastEmbedEmbeddings(BaseEmbeddings):
             "Defaults to None."
         ),
     )
+    query_prefix: str = Param(
+        "",
+        help=(
+            "Text prepended to a query before embedding. Some models are trained "
+            "with asymmetric prefixes and lose accuracy without them, e.g. the E5 "
+            "family expects `query: ` for a question and `passage: ` for a chunk."
+        ),
+    )
+    passage_prefix: str = Param(
+        "",
+        help="Text prepended to a document before embedding (see query_prefix).",
+    )
 
     @Param.auto()
     def client_(self) -> "TextEmbedding":
@@ -52,8 +64,9 @@ class FastEmbedEmbeddings(BaseEmbeddings):
         self, text: str | list[str] | Document | list[Document], *args, **kwargs
     ) -> list[DocumentWithEmbedding]:
         input_ = self.prepare_input(text)
+        prefix = self._prefix_for(text)
         embeddings = self.client_.embed(
-            [_.content for _ in input_],
+            [prefix + (_.content or "") for _ in input_],
             batch_size=self.batch_size,
             parallel=self.parallel,
         )
@@ -64,6 +77,18 @@ class FastEmbedEmbeddings(BaseEmbeddings):
             )
             for doc, embedding in zip(input_, embeddings)
         ]
+
+    def _prefix_for(self, text) -> str:
+        """Pick the query or passage prefix for this call.
+
+        The codebase embeds one string when it is a query and a list of documents
+        when it is building the index (see ``VectorIndexing`` /
+        ``VectorRetrieval``), so the input shape is what distinguishes them.
+        """
+        if not (self.query_prefix or self.passage_prefix):
+            return ""
+        is_query = isinstance(text, (str, Document))
+        return self.query_prefix if is_query else self.passage_prefix
 
     async def ainvoke(
         self, text: str | list[str] | Document | list[Document], *args, **kwargs

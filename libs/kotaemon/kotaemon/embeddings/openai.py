@@ -63,6 +63,14 @@ class BaseOpenAIEmbeddings(BaseEmbeddings):
     context_length: Optional[int] = Param(
         None, help="The maximum context length of the embedding model"
     )
+    batch_size: Optional[int] = Param(
+        None,
+        help=(
+            "Maximum number of texts sent per request. Providers differ: OpenAI "
+            "accepts thousands, while DashScope (text-embedding-v3) accepts 25. "
+            "None means a single request with everything."
+        ),
+    )
 
     @Param.auto(depends_on=["max_retries"])
     def max_retries_(self):
@@ -101,8 +109,7 @@ class BaseOpenAIEmbeddings(BaseEmbeddings):
                 splitted_indices[idx] = (len(input_), len(input_) + 1)
                 input_.append(text.text)
 
-        resp = self.openai_response(client, input=input_, **kwargs).dict()
-        output_ = list(sorted(resp["data"], key=lambda x: x["index"]))
+        output_ = self._embed_all(client, input_, **kwargs)
 
         output = []
         for idx, doc in enumerate(input_doc):
@@ -123,6 +130,23 @@ class BaseOpenAIEmbeddings(BaseEmbeddings):
             output.append(DocumentWithEmbedding(embedding=emb.tolist(), content=doc))
 
         return output
+
+    def _embed_all(self, client, inputs: list, **kwargs) -> list[dict]:
+        """Embed every input, splitting into batches when the provider limits them.
+
+        Indices restart at 0 in each response, so sorting inside a batch and then
+        concatenating keeps the result aligned with ``inputs``.
+        """
+        if not inputs:
+            return []
+        step = self.batch_size or len(inputs)
+        data: list[dict] = []
+        for start in range(0, len(inputs), step):
+            response = self.openai_response(
+                client, input=inputs[start : start + step], **kwargs
+            ).dict()
+            data.extend(sorted(response["data"], key=lambda item: item["index"]))
+        return data
 
     async def ainvoke(
         self, text: str | list[str] | Document | list[Document], *args, **kwargs

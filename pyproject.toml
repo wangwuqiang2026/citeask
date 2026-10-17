@@ -22,7 +22,7 @@ dependencies = [
     "ktem"
 ]
 authors = [
-    { name = "wangwuqiang2026", url = "https://github.com/wangwuqiang2026" },
+    { name = "wangwuqiang2026" },
 ]
 classifiers = [
     "Programming Language :: Python :: 3",

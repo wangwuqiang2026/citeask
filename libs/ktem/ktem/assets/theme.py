@@ -145,8 +145,7 @@ light_mode = dict(
 
 class Kotaemon(Soft):
     """
-    Official theme of Kotaemon.
-    Public version: https://huggingface.co/spaces/lone17/kotaemon
+    Default theme of the application.
     """
 
     def __init__(
@@ -183,7 +182,7 @@ class Kotaemon(Soft):
             font=font,
             font_mono=font_mono,
         )
-        self.name = "kotaemon"
+        self.name = "citeask"
         super().set(
             **common,
             **dark_mode,

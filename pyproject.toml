@@ -22,10 +22,7 @@ dependencies = [
     "ktem"
 ]
 authors = [
-    { name = "@trducng", email = "john@cinnamon.is" },
-    { name = "@lone17", email = "ian@cinnamon.is" },
-    { name = "@taprosoft", email = "tadashi@cinnamon.is" },
-    { name = "@cin-albert", email = "albert@cinnamon.is" },
+    { name = "wangwuqiang2026", url = "https://github.com/wangwuqiang2026" },
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -53,9 +50,7 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://cinnamon.github.io/kotaemon/"
-Repository = "https://github.com/Cinnamon/kotaemon/"
-Documentation = "https://cinnamon.github.io/kotaemon/"
+Repository = "https://github.com/wangwuqiang2026/citeask"
 
 [tool.codespell]
 skip = "*.js,*.css,*.map"

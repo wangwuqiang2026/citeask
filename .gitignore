@@ -477,3 +477,10 @@ doc_env/
 # application data
 ktem_app_data/
 gradio_tmp/
+
+# local embedding model cache (FastEmbed writes to CWD by default, ~240MB)
+fastembed_cache/
+
+# other runtime caches written into the working directory
+data-gym-cache/
+flow_tmp/

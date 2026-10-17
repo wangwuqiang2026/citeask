@@ -1,411 +1,241 @@
-<div align="center">
+# 引问 · CiteAsk
 
-# kotaemon
+文档问答系统：**扫描件与长文档可直接入索引，答案逐页可溯源，检索效果用评测驱动迭代。**
 
-An open-source clean & customizable RAG UI for chatting with your documents. Built with both end users and
-developers in mind.
+> Document QA with OCR-aware ingestion, page-level citations, and an evaluated retrieval pipeline.
 
-![Preview](https://raw.githubusercontent.com/Cinnamon/kotaemon/main/docs/images/preview-graph.png)
+面向的场景很具体：把一份**扫描版 PDF**（学校/单位的积分办法）变成可以按页引用、能回答细节问题（"英语四六级加几分"）的知识库。
 
-<a href="https://trendshift.io/repositories/11607" target="_blank"><img src="https://trendshift.io/api/badge/repositories/11607" alt="Cinnamon%2Fkotaemon | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
+---
 
-[Live Demo #1](https://huggingface.co/spaces/cin-model/kotaemon) |
-[Live Demo #2](https://huggingface.co/spaces/cin-model/kotaemon-demo) |
-[Online Install](https://cinnamon.github.io/kotaemon/online_install/) |
-[Colab Notebook (Local RAG)](https://colab.research.google.com/drive/1eTfieec_UOowNizTJA1NjawBJH9y_1nn)
+## 亮点速览
 
-[User Guide](https://cinnamon.github.io/kotaemon/) |
-[Developer Guide](https://cinnamon.github.io/kotaemon/development/) |
-[Feedback](https://github.com/Cinnamon/kotaemon/issues) |
-[Contact](mailto:kotaemon.support@cinnamon.is)
+| 做了什么 | 可验证的证据 |
+|---|---|
+| 修复**检索静默失效**：默认配置下召回恒为空，模型绕过文档凭记忆作答 | 同一条默认路径：修复前召回 0 条 → 修复后正确命中并带引用（[§2.5](MODIFICATIONS.md#25-验证证据)） |
+| 新增**扫描件 OCR 检索链路**：文字层只有标题时按页 OCR 后再入库 | 同一份 PDF 正文从 **209 字符 → 2322 字符**，问题「英语四六级加几分」得到「四级 +4 分 / 六级 +6 分」并引用 `[第 2 页]`（[§2.7](MODIFICATIONS.md#27-同类缺陷二扫描版-pdf-的正文根本没进索引)） |
+| 上游**无 i18n 机制**下做中文界面：译文不落源码 | **336** 条词条、**296** 处标签本地化，剩余 18 条为刻意保留的品牌/标识符（[§3](MODIFICATIONS.md#三界面汉化引入翻译库译文不入代码)） |
+| 建立**检索评测**（只跑检索层，零 token 成本） | 27 条问题、Hit@1 **59.3%** / MRR **0.702**（[评测](#检索评测)） |
+| 向量模型**用评测选型**，而不是凭感觉 | 4 个候选模型横向对比，Hit@1 从 **36.7% → 60.0%**（30 题版本实测） |
+| 向量化可切换：**通义 API（默认）** 或 **本地 ONNX**（离线兜底） | 通义与本地 mpnet 指标相当（Hit@1 均 60.0%，30 题版本），前者省掉 1 GB 本地模型 |
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/release/python-31013/)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
-<a href="https://github.com/Cinnamon/kotaemon/pkgs/container/kotaemon" target="_blank">
-<img src="https://img.shields.io/badge/docker_pull-kotaemon:latest-brightgreen" alt="docker pull ghcr.io/cinnamon/kotaemon:latest"></a>
-![download](https://img.shields.io/github/downloads/Cinnamon/kotaemon/total.svg?label=downloads&color=blue)
-<a href='https://huggingface.co/spaces/cin-model/kotaemon-demo'><img src='https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue'></a>
-<a href="https://hellogithub.com/en/repository/d3141471a0244d5798bc654982b263eb" target="_blank"><img src="https://abroad.hellogithub.com/v1/widgets/recommend.svg?rid=d3141471a0244d5798bc654982b263eb&claim_uid=RLiD9UZ1rEHNaMf&theme=small" alt="Featured｜HelloGitHub" /></a>
+自动化测试 **88 个用例**全绿，全部离线运行（不联网、不调用模型）。
 
-</div>
+---
 
-<!-- start-intro -->
+## 架构
 
-## Introduction
+```
+┌──────────────── Gradio 界面（中文，词表驱动）────────────────┐
+│   聊天   │   文件集合   │   资源   │   设置   │   帮助       │
+└─────────────────────────────┬──────────────────────────────┘
+                              │ 事件 / 会话状态
+┌─────────────────────────────▼──────────────────────────────┐
+│ ktem 应用层：会话管理、检索范围选择、引用面板渲染           │
+└────────┬────────────────────────────────────┬──────────────┘
+         │ 索引                                │ 检索
+┌────────▼───────────────────┐      ┌─────────▼──────────────┐
+│ 文件抽取                    │      │ 混合检索                │
+│  · PDF：OCRPDFReader       │      │  · Chroma 向量库         │
+│    ├ 文字层足够 → 直接用    │      │  · LanceDB 文档库        │
+│    └ 扫描页 → 本地 OCR     │      │  · top_k / MMR / 重排    │
+└────────┬───────────────────┘      └─────────┬──────────────┘
+         │ 向量化                             │
+┌────────▼────────────────────────────────────▼──────────────┐
+│ 向量化：通义 text-embedding-v3（默认，API）                  │
+│        或本地 FastEmbed（离线兜底）     对话：DeepSeek（API） │
+└────────────────────────────────────────────────────────────┘
 
-This project serves as a functional RAG UI for both end users who want to do QA on their
-documents and developers who want to build their own RAG pipeline.
-<br>
-
-```yml
-+----------------------------------------------------------------------------+
-| End users: Those who use apps built with `kotaemon`.                       |
-| (You use an app like the one in the demo above)                            |
-|     +----------------------------------------------------------------+     |
-|     | Developers: Those who built with `kotaemon`.                   |     |
-|     | (You have `import kotaemon` somewhere in your project)         |     |
-|     |     +----------------------------------------------------+     |     |
-|     |     | Contributors: Those who make `kotaemon` better.    |     |     |
-|     |     | (You make PR to this repo)                         |     |     |
-|     |     +----------------------------------------------------+     |     |
-|     +----------------------------------------------------------------+     |
-+----------------------------------------------------------------------------+
+词表：libs/ktem/ktem/assets/i18n/zh.json（生成后提交入库，clone 即中文）
 ```
 
-### For end users
+---
 
-- **Clean & Minimalistic UI**: A user-friendly interface for RAG-based QA.
-- **Support for Various LLMs**: Compatible with LLM API providers (OpenAI, AzureOpenAI, Cohere, etc.) and local LLMs (via `ollama` and `llama-cpp-python`).
-- **Easy Installation**: Simple scripts to get you started quickly.
+## 三个值得讲的问题
 
-### For developers
+### 1. 检索静默失效：功能"配了"，但没生效
 
-- **Framework for RAG Pipelines**: Tools to build your own RAG-based document QA pipeline.
-- **Customizable UI**: See your RAG pipeline in action with the provided UI, built with <a href='https://github.com/gradio-app/gradio'>Gradio <img src='https://img.shields.io/github/stars/gradio-app/gradio'></a>.
-- **Gradio Theme**: If you use Gradio for development, check out our theme here: [kotaemon-gradio-theme](https://github.com/lone17/kotaemon-gradio-theme).
+默认配置下提问，界面一切正常、模型也能给出像模像样的答案，**但引用栏是 `No evidence found.`** —— 检索被整段跳过，模型在用训练记忆作答。
 
-## Key Features
+根因是两处叠加的状态缺陷：检索范围单选框的默认值不在可选项集合内（UI 呈"未选中"），以及全库检索分支依赖一个只在用户手动点击后才会刷新的陈旧 `gr.State`。两者都让 `doc_ids` 变空，而 `pipelines.py` 里 `if not doc_ids: return []` 直接短路。
 
-- **Host your own document QA (RAG) web-UI**: Support multi-user login, organize your files in private/public collections, collaborate and share your favorite chat with others.
+修复：默认值改为合法值、把会话中的权威 `user_id` 透传给选择器，覆盖 File 索引与 3 个 GraphRAG 分支，并把选择器逻辑抽成纯函数以便单测。
 
-- **Organize your LLM & Embedding models**: Support both local LLMs & popular API providers (OpenAI, Azure, Ollama, Groq).
+### 2. 扫描件：正文根本没进索引
 
-- **Hybrid RAG pipeline**: Sane default RAG pipeline with hybrid (full-text & vector) retriever and re-ranking to ensure best retrieval quality.
+用户上传的制度文件是**扫描件**：4 页只抽出 209 个字符，而且抽出来的是各级标题（`⼀`/`⼆` 还被抽成「康熙部首」码位，U+2F00）。正文是图片，而 DeepSeek 是纯文本模型。
 
-- **Multi-modal QA support**: Perform Question Answering on multiple documents with figures and tables support. Support multi-modal document parsing (selectable options on UI).
+导出索引块后一目了然：4 个 37–59 字符的标题块 + 4 个 `Page thumbnail` 图片块，**正文 0 字符**。
 
-- **Advanced citations with document preview**: By default the system will provide detailed citations to ensure the correctness of LLM answers. View your citations (incl. relevant score) directly in the _in-browser PDF viewer_ with highlights. Warning when retrieval pipeline return low relevant articles.
+修复：新增 `OCRPDFReader`，**按页决策**——文字层 ≥ 200 字符直接用（数字版 PDF 零开销）；不足则渲染 200 DPI 交给本地 OCR（PP-OCR，跑在已装的 onnxruntime 上，无 PyTorch，模型随 wheel 自带，全程离线）；OCR 失败则保留原文字层，绝不把页面变空。
 
-- **Support complex reasoning methods**: Use question decomposition to answer your complex/multi-hop question. Support agent-based reasoning with `ReAct`, `ReWOO` and other agents.
+### 3. 上游没有 i18n，译文又不能写进源码
 
-- **Configurable settings UI**: You can adjust most important aspects of retrieval & generation process on the UI (incl. prompts).
+Gradio 4.39 没有 `gr.I18n`，界面文案散落在 20 多个文件里。做法是一条「采集 → 外部翻译 → 词表缓存 → 回写」的流水线，但难点在于**有三类串绕开了组件树**：
 
-- **Extensible**: Being built on Gradio, you are free to customize or add any UI elements as you like. Also, we aim to support multiple strategies for document indexing & retrieval. `GraphRAG` indexing pipeline is provided as an example.
+| 通道 | 例子 | 处理 |
+|---|---|---|
+| Python 运行时拼装 | `[Page {}]`、`相关性分数` | `tr()` 包裹 |
+| 事件回调里的字面量 | `Indexing completed.` | `tr()` 包裹 |
+| 浏览器端拼装 | `version:`、`Browse conversation` | 注入 `window.__KTEM_t` |
+| 事件弹窗 | 约 50 条 `gr.Info/Warning/Error` | 只改 3 个入口的钩子 |
 
-![Preview](https://raw.githubusercontent.com/Cinnamon/kotaemon/main/docs/images/preview.png)
+其中踩过一个把整个前端搞挂的坑：把词表**拼在 `gr.Blocks(js=...)` 前面**会导致 Gradio 的函数表达式包装语法错误，整段脚本一行不执行 → 登录框永不出现。最终改为注入 `<head>`，并补了回归测试（[§3.5](MODIFICATIONS.md#35-运行时字符串三条绕开组件树的通道)）。
 
-## Installation
+---
 
-> If you are not a developer and just want to use the app, please check out our easy-to-follow [User Guide](https://cinnamon.github.io/kotaemon/). Download the `.zip` file from the [latest release](https://github.com/Cinnamon/kotaemon/releases/latest) to get all the newest features and bug fixes.
+## 检索评测
 
-### System requirements
+评测只跑**检索层**：不调用任何模型，因此零 token 成本，换模型/换切块/换重排都能直接量化对比。
 
-1. [Python](https://www.python.org/downloads/) >= 3.10
-2. [Docker](https://www.docker.com/): optional, if you [install with Docker](#with-docker-recommended)
-3. [Unstructured](https://docs.unstructured.io/open-source/installation/full-installation#full-installation) if you want to process files other than `.pdf`, `.html`, `.mhtml`, and `.xlsx` documents. Installation steps differ depending on your operating system. Please visit the link and follow the specific instructions provided there.
-
-### With Docker (recommended)
-
-1. We support both `lite` & `full` version of Docker images. With `full` version, the extra packages of `unstructured` will be installed, which can support additional file types (`.doc`, `.docx`, ...) but the cost is larger docker image size. For most users, the `lite` image should work well in most cases.
-
-   - To use the `full` version.
-
-     ```shell
-     docker run \
-     -e GRADIO_SERVER_NAME=0.0.0.0 \
-     -e GRADIO_SERVER_PORT=7860 \
-     -v ./ktem_app_data:/app/ktem_app_data \
-     -p 7860:7860 -it --rm \
-     ghcr.io/cinnamon/kotaemon:main-full
-     ```
-
-   - To use the `full` version with bundled **Ollama** for _local / private RAG_.
-
-     ```shell
-     # change image name to
-     docker run <...> ghcr.io/cinnamon/kotaemon:main-ollama
-     ```
-
-   - To use the `lite` version.
-
-   ```shell
-    # change image name to
-    docker run <...> ghcr.io/cinnamon/kotaemon:main-lite
-   ```
-
-2. We currently support and test two platforms: `linux/amd64` and `linux/arm64` (for newer Mac). You can specify the platform by passing `--platform` in the `docker run` command. For example:
-
-   ```shell
-   # To run docker with platform linux/arm64
-   docker run \
-   -e GRADIO_SERVER_NAME=0.0.0.0 \
-   -e GRADIO_SERVER_PORT=7860 \
-   -v ./ktem_app_data:/app/ktem_app_data \
-   -p 7860:7860 -it --rm \
-   --platform linux/arm64 \
-   ghcr.io/cinnamon/kotaemon:main-lite
-   ```
-
-3. Once everything is set up correctly, you can go to `http://localhost:7860/` to access the WebUI.
-
-4. We use [GHCR](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry) to store docker images, all images can be found [here.](https://github.com/Cinnamon/kotaemon/pkgs/container/kotaemon)
-
-### Without Docker
-
-1. Clone the repository:
-
-   ```shell
-   git clone https://github.com/Cinnamon/kotaemon
-   cd kotaemon
-   ```
-
-2. Setup the environment:
-
-- **Option 1: Using [uv](https://docs.astral.sh/uv/getting-started/installation/) (recommended)**
-
-  ```shell
-  uv sync --python 3.10
-  source .venv/bin/activate
-  ```
-
-- **Option 2: Using conda**
-
-  ```shell
-  conda create -n kotaemon python=3.10
-  conda activate kotaemon
-
-  pip install -e "libs/kotaemon[all]"
-  pip install -e "libs/ktem"
-  ```
-
-3. Create a `.env` file in the root of this project. Use `.env.example` as a template.
-
-   The `.env` file is there to serve use cases where users want to pre-config the models before starting up the app (e.g. deploy the app on HF hub). The file will only be used to populate the db once upon the first run, it will no longer be used in consequent runs.
-
-4. (Optional) To enable in-browser `PDF_JS` viewer, download [PDF_JS_DIST](https://github.com/mozilla/pdf.js/releases/download/v4.0.379/pdfjs-4.0.379-dist.zip) then extract it to `libs/ktem/ktem/assets/prebuilt`.
-
-   <img src="https://raw.githubusercontent.com/Cinnamon/kotaemon/main/docs/images/pdf-viewer-setup.png" alt="pdf-setup" width="300">
-
-5. Start the web server:
-
-   ```shell
-   python app.py
-   ```
-
-   - The app will be automatically launched in your browser.
-   - Default username and password are both `admin`. You can set up additional users directly through the UI.
-
-   ![Chat tab](https://raw.githubusercontent.com/Cinnamon/kotaemon/main/docs/images/chat-tab.png)
-
-6. Check the `Resources` tab and `LLMs and Embeddings` and ensure that your `api_key` value is set correctly from your `.env` file. If it is not set, you can set it there.
-
-### Setup GraphRAG
-
-> [!NOTE]
-> Official MS GraphRAG indexing only works with OpenAI or Ollama API.
-> We recommend most users to use NanoGraphRAG implementation for straightforward integration with Kotaemon.
-
-<details>
-
-<summary>Setup Nano GRAPHRAG</summary>
-
-- Install nano-GraphRAG: `pip install nano-graphrag`
-- `nano-graphrag` install might introduce version conflicts, see [this issue](https://github.com/Cinnamon/kotaemon/issues/440)
-  - To quickly fix: `pip uninstall hnswlib chroma-hnswlib && pip install chroma-hnswlib`
-- Launch Kotaemon with `USE_NANO_GRAPHRAG=true` environment variable.
-- Set your default LLM & Embedding models in Resources setting and it will be recognized automatically from NanoGraphRAG.
-
-</details>
-
-<details>
-
-<summary>Setup LIGHTRAG</summary>
-
-- Install LightRAG: `pip install git+https://github.com/HKUDS/LightRAG.git`
-- `LightRAG` install might introduce version conflicts, see [this issue](https://github.com/Cinnamon/kotaemon/issues/440)
-  - To quickly fix: `pip uninstall hnswlib chroma-hnswlib && pip install chroma-hnswlib`
-- Launch Kotaemon with `USE_LIGHTRAG=true` environment variable.
-- Set your default LLM & Embedding models in Resources setting and it will be recognized automatically from LightRAG.
-
-</details>
-
-<details>
-
-<summary>Setup MS GRAPHRAG</summary>
-
-- **Non-Docker Installation**: If you are not using Docker, install GraphRAG with the following command:
-
-  ```shell
-  pip install "graphrag<=0.3.6" future
-  ```
-
-- **Setting Up API KEY**: To use the GraphRAG retriever feature, ensure you set the `GRAPHRAG_API_KEY` environment variable. You can do this directly in your environment or by adding it to a `.env` file.
-- **Using Local Models and Custom Settings**: If you want to use GraphRAG with local models (like `Ollama`) or customize the default LLM and other configurations, set the `USE_CUSTOMIZED_GRAPHRAG_SETTING` environment variable to true. Then, adjust your settings in the `settings.yaml.example` file.
-
-</details>
-
-### Setup Local Models (for local/private RAG)
-
-See [Local model setup](docs/local_model.md).
-
-### Setup multimodal document parsing (OCR, table parsing, figure extraction)
-
-These options are available:
-
-- [Azure Document Intelligence (API)](https://azure.microsoft.com/en-us/products/ai-services/ai-document-intelligence)
-- [Adobe PDF Extract (API)](https://developer.adobe.com/document-services/docs/overview/pdf-extract-api/)
-- [Docling (local, open-source)](https://github.com/DS4SD/docling) – see [integrations/docling.md](./docs/integrations/docling.md) for Kotaemon-specific setup.
-- [PaddleOCR (local, open-source)](https://github.com/PADDLEPADDLE/PADDLEOCR) – see [integrations/paddle_ocr.md](./docs/integrations/paddle_ocr.md) for Kotaemon-specific setup.
-
-Select corresponding loaders in `Settings -> Retrieval Settings -> File loader`
-
-### Customize your application
-
-- By default, all application data is stored in the `./ktem_app_data` folder. You can back up or copy this folder to transfer your installation to a new machine.
-
-- For advanced users or specific use cases, you can customize these files:
-
-  - `flowsettings.py`
-  - `.env`
-
-#### `flowsettings.py`
-
-This file contains the configuration of your application. You can use the example
-[here](flowsettings.py) as the starting point.
-
-<details>
-
-<summary>Notable settings</summary>
-
-```python
-# setup your preferred document store (with full-text search capabilities)
-KH_DOCSTORE=(Elasticsearch | LanceDB | SimpleFileDocumentStore)
-
-# setup your preferred vectorstore (for vector-based search)
-KH_VECTORSTORE=(ChromaDB | LanceDB | InMemory | Milvus | Qdrant)
-
-# Enable / disable multimodal QA
-KH_REASONINGS_USE_MULTIMODAL=True
-
-# Setup your new reasoning pipeline or modify existing one.
-KH_REASONINGS = [
-    "ktem.reasoning.simple.FullQAPipeline",
-    "ktem.reasoning.simple.FullDecomposeQAPipeline",
-    "ktem.reasoning.react.ReactAgentPipeline",
-    "ktem.reasoning.rewoo.RewooAgentPipeline",
-]
+```powershell
+# 先把语料上传进「文件集合」，然后（应用需停止，二者共用 sqlite / LanceDB）
+.\.venv\Scripts\python.exe tools\eval_retrieval.py --eval tools\eval\zh-points-rules.json `
+    --out tools\eval\results.md --json tools\eval\results.json
 ```
 
-</details>
+当前基线（27 条问题，语料 4 个页级块）：
 
-#### `.env`
+| 指标 | 值 |
+|---|---|
+| 问题数 | 27 |
+| 语料 | 2 个文件 / 8 个块（目标 4 块 + 干扰 4 块） |
+| Hit@1 | **59.3%** |
+| Hit@3 | **74.1%** |
+| Hit@5 | **81.5%** |
+| MRR | **0.702** |
+| 关键事实覆盖率 | **81.5%** |
 
-This file provides another way to configure your models and credentials.
+> 读法：`top_k=5` 时，库里**多出的无关文档会摊薄命中**——单个文件（4 块）时 Hit@5 是 100%，
+> 加入第二个文件（共 8 块）后掉到 81.5%，Hit@1 基本不变、MRR 从 0.739 降到 0.702。
+> 这正是「重排 / `top_k` 调参」要解决的问题，也是下一步的量化目标。
 
-<details>
+> 评测集里的语料文件名与机构信息已做脱敏处理；在你自己的语料上运行，用
+> `--corpus "你的文件名"` 覆盖评测集里的 `corpus` 字段即可。
 
-<summary>Configure model via the .env file</summary>
+### 向量模型选型（评测驱动）
 
-- Alternatively, you can configure the models via the `.env` file with the information needed to connect to the LLMs. This file is located in the folder of the application. If you don't see it, you can create one.
+同一套评测、同一份语料，只改向量模型（下表为**当时的 30 题版本**，与上方 27 题基线不可直接相减）：
 
-- Currently, the following providers are supported:
+| 模型 | 维度 | 本地体积 | Hit@1 | Hit@3 | MRR |
+|---|---|---|---|---|---|
+| `paraphrase-multilingual-MiniLM-L12-v2`（初版） | 384 | 0.22 GB | 36.7% | 73.3% | 0.589 |
+| `paraphrase-multilingual-mpnet-base-v2`（本地，离线兜底） | 768 | 1.0 GB | 60.0% | 80.0% | 0.739 |
+| **`text-embedding-v3`（通义 DashScope，现默认）** | 1024 | 0（API） | **60.0%** | 76.7% | 0.736 |
+| `multilingual-e5-large`（带 E5 前缀） | 1024 | 2.24 GB | 53.3% | 73.3% | 0.683 |
+| `multilingual-e5-large`（不带前缀） | 1024 | 2.24 GB | 46.7% | 70.0% | 0.642 |
 
-  - **OpenAI**
+结论：
 
-    In the `.env` file, set the `OPENAI_API_KEY` variable with your OpenAI API key in order
-    to enable access to OpenAI's models. There are other variables that can be modified,
-    please feel free to edit them to fit your case. Otherwise, the default parameter should
-    work for most people.
+1. 换掉 2020 年的 MiniLM 后 **Hit@1 提升 23.3 个百分点**（36.7% → 60.0%），只是换一个模型名；
+2. **通义 v3 与本地 mpnet 基本持平**（Hit@1 都是 60.0%，MRR 0.736 vs 0.739），
+   但通义不占本地磁盘、也不用下载模型 —— 所以默认走通义，本地模型作为离线兜底保留；
+3. E5 系列**必须带 `query: ` / `passage: ` 前缀**：同一个模型，带前缀比不带高 6.6 个百分点。
+   框架原本把查询和文档一起送进同一个接口、丢掉了这个区分，本仓库给 FastEmbed 封装补了
+   `query_prefix` / `passage_prefix`。
 
-    ```shell
-    OPENAI_API_BASE=https://api.openai.com/v1
-    OPENAI_API_KEY=<your OpenAI API key here>
-    OPENAI_CHAT_MODEL=gpt-3.5-turbo
-    OPENAI_EMBEDDINGS_MODEL=text-embedding-ada-002
-    ```
+> 切换方式：在 `.env` 里配 `DASHSCOPE_API_KEY` 即默认用通义（`text-embedding-v3`）；
+> 不配则自动回落到本地 FastEmbed。**换向量模型必须重建索引**（维度不同），用
+> `tools/reindex_corpus.py`。
 
-  - **Azure OpenAI**
+**下一步（仍是评测驱动）**：默认重排器是 Cohere —— 没有 API key，每次检索只打印
+`Cohere API key not found. Skipping rerankings.` 然后原样返回。换成本地 ONNX cross-encoder 后，
+用同一套评测对比 Hit@1 / MRR。
 
-    For OpenAI models via Azure platform, you need to provide your Azure endpoint and API
-    key. You might also need to provide your developments' name for the chat model and the
-    embedding model depending on how you set up Azure development.
+---
 
-    ```shell
-    AZURE_OPENAI_ENDPOINT=
-    AZURE_OPENAI_API_KEY=
-    OPENAI_API_VERSION=2024-02-15-preview
-    AZURE_OPENAI_CHAT_DEPLOYMENT=gpt-35-turbo
-    AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT=text-embedding-ada-002
-    ```
+## 快速开始
 
-  - **Local Models**
+```powershell
+# 1. 环境（必须 Python 3.10）
+uv python install 3.10
+uv sync --python 3.10 --no-install-package llama-cpp-python
 
-    - Using `ollama` OpenAI compatible server:
+# 2. 配置
+Copy-Item .env.example .env
+#   在 .env 里填 DEEPSEEK_API_KEY
 
-      - Install [ollama](https://github.com/ollama/ollama) and start the application.
-
-      - Pull your model, for example:
-
-        ```shell
-        ollama pull llama3.1:8b
-        ollama pull nomic-embed-text
-        ```
-
-      - Set the model names on web UI and make it as default:
-
-        ![Models](https://raw.githubusercontent.com/Cinnamon/kotaemon/main/docs/images/models.png)
-
-    - Using `GGUF` with `llama-cpp-python`
-
-      You can search and download a LLM to be ran locally from the [Hugging Face Hub](https://huggingface.co/models). Currently, these model formats are supported:
-
-      - GGUF
-
-        You should choose a model whose size is less than your device's memory and should leave
-        about 2 GB. For example, if you have 16 GB of RAM in total, of which 12 GB is available,
-        then you should choose a model that takes up at most 10 GB of RAM. Bigger models tend to
-        give better generation but also take more processing time.
-
-        Here are some recommendations and their size in memory:
-
-      - [Qwen1.5-1.8B-Chat-GGUF](https://huggingface.co/Qwen/Qwen1.5-1.8B-Chat-GGUF/resolve/main/qwen1_5-1_8b-chat-q8_0.gguf?download=true): around 2 GB
-
-        Add a new LlamaCpp model with the provided model name on the web UI.
-
-  </details>
-
-### Adding your own RAG pipeline
-
-#### Custom Reasoning Pipeline
-
-1. Check the default pipeline implementation in [here](libs/ktem/ktem/reasoning/simple.py). You can make quick adjustment to how the default QA pipeline work.
-2. Add new `.py` implementation in `libs/ktem/ktem/reasoning/` and later include it in `flowssettings` to enable it on the UI.
-
-#### Custom Indexing Pipeline
-
-- Check sample implementation in `libs/ktem/ktem/index/file/graph`
-
-> (more instruction WIP).
-
-<!-- end-intro -->
-
-## Citation
-
-Please cite this project as
-
-```BibTeX
-@misc{kotaemon2024,
-    title = {Kotaemon - An open-source RAG-based tool for chatting with any content.},
-    author = {The Kotaemon Team},
-    year = {2024},
-    howpublished = {\url{https://github.com/Cinnamon/kotaemon}},
-}
+# 3. 启动
+.\.venv\Scripts\python.exe -X utf8 app.py
 ```
 
-## Star History
+打开 <http://127.0.0.1:7860>，默认账号 `admin` / `admin`。
 
-<a href="https://star-history.com/#Cinnamon/kotaemon&Date">
- <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Cinnamon/kotaemon&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=Cinnamon/kotaemon&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=Cinnamon/kotaemon&type=Date" />
- </picture>
-</a>
+主要配置项（详见 [MODIFICATIONS.md §3.7](MODIFICATIONS.md#37-配置与使用)）：
 
-## Contribution
+| 配置项 | 默认 | 作用 |
+|---|---|---|
+| `KH_UI_LANGUAGE` | `zh` | 界面语言；设 `en` 还原上游英文界面 |
+| `KH_ANSWER_LANGUAGE` | 跟随界面语言 | 模型**回答**语言 |
+| `PDF_OCR_ENABLED` | `true` | 扫描页走本地 OCR；`false` 回退到原抽取器 |
+| `PDF_OCR_MIN_CHARS` / `PDF_OCR_DPI` | `200` / `200` | OCR 触发阈值与渲染精度 |
+| `DASHSCOPE_API_KEY` | 空 | 配了就用通义 `text-embedding-v3` 做向量（默认）；不配则回落到本地 FastEmbed |
+| `LOCAL_EMBEDDING_MODEL` | mpnet-base-v2 | 本地兜底向量模型（仅在没配通义 key 时使用） |
 
-Since our project is actively being developed, we greatly value your feedback and contributions. Please see our [Contributing Guide](https://github.com/Cinnamon/kotaemon/blob/main/CONTRIBUTING.md) to get started. Thank you to all our contributors!
+中文界面词表已随仓库提供（`libs/ktem/ktem/assets/i18n/zh.json`），**clone 下来就是中文**；
+需要重新生成/更新时：
 
-<a href="https://github.com/Cinnamon/kotaemon/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=Cinnamon/kotaemon" />
-</a>
+```powershell
+.\.venv\Scripts\python.exe -m ktem.utils.i18n build --language zh --backend llm
+.\.venv\Scripts\python.exe -m ktem.utils.i18n bundle --language zh   # 同步进仓库
+```
+
+---
+
+## 测试
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest libs/kotaemon/tests/test_ocr_pdf_reader.py `
+    libs/ktem/ktem_tests/ -q     # 先停掉应用
+```
+
+覆盖：检索范围选择器的纯函数不变式、PDF OCR 抽取器的按页决策、本地化层
+（只改显示属性、选项值不丢、占位符不丢、`<script>` 不提前闭合、运行时模板回填、通知钩子）。
+
+---
+
+## 目录结构
+
+```
+├─ app.py                      启动入口：装配词表、构建 UI、注入 <head> 脚本
+├─ flowsettings.py             模型池（DeepSeek / FastEmbed）与检索、语言的默认值
+├─ libs/kotaemon/kotaemon/
+│  ├─ loaders/ocr_pdf_loader.py      OCR 感知的 PDF 抽取器（本次新增）
+│  └─ loaders/                      各类文件抽取器
+├─ libs/ktem/ktem/
+│  ├─ utils/i18n.py                  本地化流水线（采集 / 翻译 / 运行时 / JS 注入）
+│  ├─ utils/selector.py              检索范围选择的纯逻辑（可单测）
+│  ├─ assets/i18n/zh.json            中文词表（生成后入库）
+│  ├─ index/file/                    文件索引、抽取与检索管线
+│  └─ pages/                         各页面 UI
+├─ tools/
+│  ├─ eval_retrieval.py         检索评测脚本
+│  └─ eval/                     评测集与基线结果
+├─ docs/*.zh.md                 帮助页中文文档
+└─ MODIFICATIONS.md             改造全过程记录（含定位过程、实测数据、踩坑）
+```
+
+---
+
+## 已知限制
+
+- **`.pptx` / `.xls` / `.doc` 仍走 `unstructured`**：它依赖系统 `libmagic`，在本机会 403。
+  `.docx` 已改用本地 `DocxReader` 解决（见 [§2.8](MODIFICATIONS.md#28-同类缺陷三docx-上传成功但索引从未写入)）；
+  其余格式需要时可按同样方式换成本地读取器。
+- **切块粒度偏粗**：索引 `chunk_size=0`，扫描件按"页"成块（每页约 500–650 字），
+  这是 Hit@1 偏低的主因之一。
+- **重排未生效**：默认 Cohere 重排器缺 API key，检索后原样返回。
+- **OCR 成本**：约 8 秒/页（200 DPI），仅扫描页触发。
+- **向量化默认走通义 API**：需要网络与额度；离线场景可用本地 FastEmbed 兜底，
+  但首次需下载约 1 GB 模型（`fastembed_cache` 已从仓库清理，可按需重新拉取）。
+- 词表是机器翻译产物，个别术语（如 `Citation style`）可能需要人工润色，
+  改 `ktem_app_data/i18n/zh.json` 即可覆盖仓库默认值。
+
+---
+
+## 许可
+
+本项目以 **Apache-2.0** 许可发布，许可证全文见 [LICENSE.txt](LICENSE.txt)。
+
+改动的定位过程、实测数据与验证清单见 [MODIFICATIONS.md](MODIFICATIONS.md)，
+后续演进计划见 [ROADMAP.md](ROADMAP.md)。

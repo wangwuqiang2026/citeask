@@ -1,5 +1,7 @@
 # 引问 · CiteAsk
 
+[![tests](https://github.com/wangwuqiang2026/citeask/actions/workflows/tests.yaml/badge.svg)](https://github.com/wangwuqiang2026/citeask/actions/workflows/tests.yaml)
+
 文档问答系统：**扫描件与长文档可直接入索引，答案逐页可溯源，检索效果用评测驱动迭代。**
 
 > Document QA with OCR-aware ingestion, page-level citations, and an evaluated retrieval pipeline.

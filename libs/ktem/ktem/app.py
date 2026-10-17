@@ -63,6 +63,9 @@ class BaseApp:
 
         self._favicon = str(dir_assets / "img" / "favicon.svg")
 
+        #: Script for ``<head>``, i.e. evaluated before the bundled JavaScript.
+        self._head_script = ""
+
         self.default_settings = SettingGroup(
             application=BaseSettingGroup(settings=settings.SETTINGS_APP),
             reasoning=SettingReasoningGroup(settings=settings.SETTINGS_REASONING),
@@ -80,6 +83,19 @@ class BaseApp:
         self.settings_state = gr.State(self.default_settings.flatten())
 
         self.user_id = gr.State("default" if not self.f_user_management else None)
+
+    def set_head_script(self, script: str) -> None:
+        """Run ``script`` in ``<head>``, before the bundled JavaScript.
+
+        Used to publish the UI translation catalog as ``window.__KTEM_t``.
+
+        Note: this cannot be prepended to ``js``. Gradio wraps that value as a
+        single *function expression* — ``let result = await (${js})()`` — so any
+        preceding statement turns it into a syntax error and the whole bundled
+        script (including the app's own ``run()``) silently stops working.
+        Must be called before :meth:`make`.
+        """
+        self._head_script = script or ""
 
     def initialize_indices(self):
         """Create the index manager, start indices, and register to app settings"""
@@ -195,6 +211,10 @@ class BaseApp:
             "</script>"
             "<link rel='stylesheet' href='https://cdnjs.cloudflare.com/ajax/libs/tributejs/5.1.3/tribute.css'/>"  # noqa
         )
+        # The catalog must exist before main.js runs; <head> is plain HTML and is
+        # not subject to the function-expression wrapping of the `js` argument.
+        if self._head_script:
+            external_js = f"<script>{self._head_script}</script>{external_js}"
 
         with gr.Blocks(
             theme=self._theme,

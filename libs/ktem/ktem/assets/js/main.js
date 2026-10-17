@@ -7,7 +7,7 @@ function run() {
   main_parent.parentNode.parentNode.style = "padding: 0";
 
   const version_node = document.createElement("p");
-  version_node.innerHTML = "version: KH_APP_VERSION";
+  version_node.innerHTML = window.__KTEM_t("version:") + " KH_APP_VERSION";
   version_node.style = "position: fixed; top: 10px; right: 10px;";
   main_parent.appendChild(version_node);
 
@@ -21,7 +21,7 @@ function run() {
 
   // setup conversation dropdown placeholder
   let conv_dropdown = document.querySelector("#conversation-dropdown input");
-  conv_dropdown.placeholder = "Browse conversation";
+  conv_dropdown.placeholder = window.__KTEM_t("Browse conversation");
 
   // move info-expand-button
   let info_expand_button = document.getElementById("info-expand-button");
@@ -278,7 +278,7 @@ function run() {
   globalThis.fillChatInput = (event) => {
     let chatInput = document.querySelector("#chat-input textarea");
     // fill the chat input with the clicked div text
-    chatInput.value = "Explain " + event.target.textContent;
+    chatInput.value = window.__KTEM_t("Explain") + " " + event.target.textContent;
     var evt = new Event("change");
     chatInput.dispatchEvent(new Event("input", { bubbles: true }));
     chatInput.focus();

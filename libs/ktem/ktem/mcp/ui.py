@@ -4,6 +4,7 @@ import logging
 import gradio as gr
 import pandas as pd
 from ktem.app import BasePage
+from ktem.utils.i18n import tr
 
 from kotaemon.agents.tools.mcp import discover_tools_info, format_tool_list
 
@@ -331,7 +332,11 @@ class MCPManagement(BasePage):
             gr.update(visible=False),
             gr.update(visible=False),
             gr.update(value=config_str),
-            gr.update(value=f"# Tools for '{selected_name}'\n\n⏳ Fetching tools..."),
+            gr.update(
+                value=tr("# Tools for '{}'").format(selected_name)
+                + "\n\n"
+                + tr("⏳ Fetching tools...")
+            ),
         )
 
     def on_btn_delete_click(self):

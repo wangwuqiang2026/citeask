@@ -5,6 +5,8 @@ from fast_langdetect import detect
 
 from kotaemon.base import RetrievedDocument
 
+from .i18n import tr
+
 BASE_PATH = os.environ.get("GR_FILE_ROOT_PATH", "")
 
 
@@ -29,7 +31,7 @@ def get_header(doc: RetrievedDocument) -> str:
     """Get the header for the document"""
     header = ""
     if "page_label" in doc.metadata:
-        header += f" [Page {doc.metadata['page_label']}]"
+        header += " " + tr("[Page {}]").format(doc.metadata["page_label"])
 
     header += f" {doc.metadata.get('file_name', '<evidence>')}"
     return header.strip()
@@ -118,10 +120,9 @@ class Render:
         return f"""
         {html_content}
         <a href="#" class="pdf-link" data-src="{BASE_PATH}/file={pdf_path}" data-page="{page_idx}" data-search="{highlight_text}" data-phrase="{phrase}">
-            [Preview]
+            [{tr('Preview')}]
         </a>
         """  # noqa
-
     @staticmethod
     def highlight(text: str, elem_id: str | None = None) -> str:
         """Highlight text"""
@@ -167,7 +168,7 @@ class Render:
         # score from doc_store (Elasticsearch)
         if is_close(doc.score, -1.0):
             vectorstore_score = ""
-            text_search_str = " (full-text search)<br>"
+            text_search_str = f" ({tr('full-text search')})<br>"
         else:
             vectorstore_score = str(round(doc.score, 2))
             text_search_str = "<br>"
@@ -182,13 +183,14 @@ class Render:
             if doc.metadata.get("reranking_score") is not None
             else 0.0
         )
-        item_type_prefix = doc.metadata.get("type", "")
-        item_type_prefix = item_type_prefix.capitalize()
-        if item_type_prefix:
-            item_type_prefix += " from "
+        item_type = doc.metadata.get("type", "").capitalize()
+        item_type_prefix = f"{item_type} from " if item_type else ""
 
         if "raw" in item_type_prefix:
             item_type_prefix = ""
+        elif item_type_prefix:
+            # the space is added here: a translation is stripped by clean_translation
+            item_type_prefix = tr("{} from").format(tr(item_type)) + " "
 
         if llm_reranking_score > 0:
             relevant_score = llm_reranking_score
@@ -198,13 +200,13 @@ class Render:
             relevant_score = 0.0
 
         rendered_score = Render.collapsible(
-            header=f"<b>&emsp;Relevance score</b>: {relevant_score:.1f}",
-            content="<b>&emsp;&emsp;Vectorstore score:</b>"
+            header=f"<b>&emsp;{tr('Relevance score')}</b>: {relevant_score:.1f}",
+            content=f"<b>&emsp;&emsp;{tr('Vectorstore score:')}</b>"
             f" {vectorstore_score}"
             f"{text_search_str}"
-            "<b>&emsp;&emsp;LLM relevant score:</b>"
+            f"<b>&emsp;&emsp;{tr('LLM relevant score:')}</b>"
             f" {llm_reranking_score}<br>"
-            "<b>&emsp;&emsp;Reranking score:</b>"
+            f"<b>&emsp;&emsp;{tr('Reranking score:')}</b>"
             f" {reranking_score}<br>",
         )
 
@@ -221,7 +223,7 @@ class Render:
 
         rendered_header = Render.preview(
             f"<i>{item_type_prefix}{get_header(doc)}</i>"
-            f" [score: {llm_reranking_score}]",
+            f" {tr('[score: {}]').format(llm_reranking_score)}",
             doc,
             highlight_text=highlight_text,
         )

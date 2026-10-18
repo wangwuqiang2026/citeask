@@ -49,3 +49,12 @@ def test_excel_reader():
         input_file_excel,
     )
     assert len(documents) == 1
+
+
+def test_xls_engine_available():
+    """.xls (BIFF) is only readable through xlrd; openpyxl handles .xlsx alone.
+
+    pandas raises "Missing optional dependency 'xlrd'" without it, which is how
+    .xls uploads used to fail silently. Guard the declared dependency.
+    """
+    import xlrd  # noqa: F401

@@ -24,6 +24,7 @@ from kotaemon.loaders import (
     PandasExcelReader,
     PDFThumbnailReader,
     PPStructureV3Reader,
+    PptxReader,
     TxtReader,
     UnstructuredReader,
     WebReader,
@@ -53,13 +54,21 @@ ocr_pdf_reader = OCRPDFReader()
 
 KH_DEFAULT_FILE_EXTRACTORS: dict[str, BaseReader] = {
     ".xlsx": PandasExcelReader(),
+    # .xls (the old BIFF format) goes through pandas/xlrd instead of unstructured.
+    # unstructured's partition_* also ends up requiring xlrd, and its converter
+    # additionally expects LibreOffice, which does not exist on this platform; the
+    # upload was reported as failed with "Missing optional dependency 'xlrd'" and
+    # nothing was indexed, so every question about the sheet answered with
+    # "no evidence found".
+    ".xls": PandasExcelReader(),
     # .docx goes through python-docx instead of unstructured: unstructured needs
     # libmagic and, on this platform, still fails while fetching its own resources,
     # which left every .docx silently unindexed (empty file list row, "no evidence
     # found" on questions about the document).
     ".docx": DocxReader(),
-    ".pptx": unstructured,
-    ".xls": unstructured,
+    # .pptx goes through python-pptx for the same reason as .docx: the unstructured
+    # route needs libmagic and fetches its own resources (MODIFICATIONS §2.8/§5.11)
+    ".pptx": PptxReader(),
     ".doc": unstructured,
     ".html": HtmlReader(),
     ".mhtml": MhtmlReader(),

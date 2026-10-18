@@ -1,0 +1,76 @@
+{
+  "name": "示例语料（points-fixture.pptx，5 页，虚构内容）",
+  "corpus": "points-fixture.pptx",
+  "notes": [
+    "这份题集配套 tools/eval/fixtures/points-fixture.pptx（由 make_fixture.py 生成，内容虚构）。",
+    "目的：新 clone 也能复现检索指标，不依赖任何私有语料。",
+    "用法：把 fixtures/points-fixture.pptx 上传进「文件集合」并等索引完成，然后",
+    "  python -X utf8 tools/eval_retrieval.py --eval tools/eval/fixture-points.json",
+    "（需要向量化：默认通义 text-embedding-v3，或用本地 FastEmbed 离线兜底。）",
+    "题目只描述语料事实：改切块/重排/闸门后题目不变，指标才有可比性。"
+  ],
+  "questions": [
+    {
+      "id": "f01",
+      "category": "T1",
+      "question": "这份细则的满分是多少分？由哪几个部分组成？",
+      "expect_pages": ["1"],
+      "expect_terms": ["满分为100分", "五个部分"]
+    },
+    {
+      "id": "f02",
+      "category": "T2",
+      "question": "英语四级和六级分别加几分？",
+      "expect_pages": ["2"],
+      "expect_terms": ["四级通过加4分", "六级通过加6分"]
+    },
+    {
+      "id": "f03",
+      "category": "T2",
+      "question": "计算机二级通过加几分？",
+      "expect_pages": ["2"],
+      "expect_terms": ["计算机二级通过加3分"]
+    },
+    {
+      "id": "f04",
+      "category": "T2",
+      "question": "校内志愿服务每次加几分，累计上限是多少？",
+      "expect_pages": ["3"],
+      "expect_terms": ["每次加2分", "累计上限20分"]
+    },
+    {
+      "id": "f05",
+      "category": "T2",
+      "question": "寒暑假社会实践每次加几分，累计上限是多少？",
+      "expect_pages": ["3"],
+      "expect_terms": ["每次加3分", "累计上限15分"]
+    },
+    {
+      "id": "f06",
+      "category": "T1",
+      "question": "理论考试90分以上加几分？缺考怎么处理？",
+      "expect_pages": ["4"],
+      "expect_terms": ["90分以上加2分", "缺考扣3分"]
+    },
+    {
+      "id": "f07",
+      "category": "T3",
+      "question": "表格里“优秀”对应多少分？",
+      "expect_pages": ["4"],
+      "expect_terms": ["优秀,10分"]
+    },
+    {
+      "id": "f08",
+      "category": "T1",
+      "question": "宿舍卫生不合格扣几分？弄虚作假会怎么处理？",
+      "expect_pages": ["5"],
+      "expect_terms": ["扣2分", "取消当年度评优资格"]
+    },
+    {
+      "id": "f09",
+      "category": "T4",
+      "expect_answer": false,
+      "question": "学校食堂几点开门？"
+    }
+  ]
+}

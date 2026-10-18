@@ -1,3 +1,5 @@
+import logging
+import re
 from itertools import islice
 from typing import Optional
 
@@ -15,6 +17,8 @@ from theflow.utils.modules import import_dotted_string
 from kotaemon.base import Param
 
 from .base import BaseEmbeddings, Document, DocumentWithEmbedding
+
+logger = logging.getLogger(__name__)
 
 
 def split_text_by_chunk_size(text: str, chunk_size: int) -> list[list[int]]:
@@ -66,9 +70,12 @@ class BaseOpenAIEmbeddings(BaseEmbeddings):
     batch_size: Optional[int] = Param(
         None,
         help=(
-            "Maximum number of texts sent per request. Providers differ: OpenAI "
-            "accepts thousands, while DashScope (text-embedding-v3) accepts 25. "
-            "None means a single request with everything."
+            "Maximum number of texts sent per request. Providers differ and the "
+            "documented figure is often not the enforced one (DashScope's "
+            "text-embedding-v3 rejects more than 10), so this is a starting hint: "
+            "when a provider answers that the batch is too large, the limit it "
+            "names is picked up and reused for the rest of the run. None means one "
+            "request with everything."
         ),
     )
 
@@ -131,21 +138,76 @@ class BaseOpenAIEmbeddings(BaseEmbeddings):
 
         return output
 
+    #: How a provider words "you sent too many inputs in one request". DashScope:
+    #: ``<400> InternalError.Algo.InvalidParameter: Value error, batch size is
+    #: invalid, it should not be larger than 10.``
+    _BATCH_LIMIT_PATTERN = re.compile(
+        r"(?:larger than|at most|no more than|maximum(?: of)?|max)\D{0,12}?(\d+)",
+        re.IGNORECASE,
+    )
+    _BATCH_LIMIT_HINTS = ("batch size", "batch_size", "too many inputs")
+
+    @classmethod
+    def _smaller_batch_size(
+        cls, step: int, error: Exception
+    ) -> Optional[int]:
+        """Batch size to retry with, or ``None`` when this is not a size problem.
+
+        A batch size that is too large is a configuration guess, not a document
+        defect: before this, a ``batch_size`` of 25 against DashScope (which allows
+        10) made every document with more than 10 chunks impossible to index — the
+        upload failed with a 400 and the file never answered a question. The limit
+        the provider names is honoured directly; otherwise the batch is halved.
+        """
+        if step <= 1:
+            return None
+
+        message = str(error)
+        match = cls._BATCH_LIMIT_PATTERN.search(message)
+        if match:
+            limit = int(match.group(1))
+            if 0 < limit < step:
+                return limit
+
+        if any(hint in message.lower() for hint in cls._BATCH_LIMIT_HINTS):
+            return max(1, step // 2)
+        return None
+
     def _embed_all(self, client, inputs: list, **kwargs) -> list[dict]:
         """Embed every input, splitting into batches when the provider limits them.
 
         Indices restart at 0 in each response, so sorting inside a batch and then
         concatenating keeps the result aligned with ``inputs``.
+
+        The batch size adapts downwards when the provider rejects it (see
+        :meth:`_smaller_batch_size`) and the accepted size is kept on the instance,
+        so the rejection is paid once per run rather than once per batch.
         """
         if not inputs:
             return []
         step = self.batch_size or len(inputs)
         data: list[dict] = []
-        for start in range(0, len(inputs), step):
-            response = self.openai_response(
-                client, input=inputs[start : start + step], **kwargs
-            ).dict()
+        start = 0
+        while start < len(inputs):
+            batch = inputs[start : start + step]
+            try:
+                response = self.openai_response(client, input=batch, **kwargs).dict()
+            except Exception as exc:  # noqa: BLE001 - classified by the helper
+                smaller = self._smaller_batch_size(step, exc)
+                if smaller is None:
+                    raise
+                logger.warning(
+                    "embedding provider rejected a batch of %d inputs (%s); "
+                    "retrying with %d and keeping that limit",
+                    step,
+                    exc,
+                    smaller,
+                )
+                step = smaller
+                self.batch_size = smaller
+                continue
             data.extend(sorted(response["data"], key=lambda item: item["index"]))
+            start += len(batch)
         return data
 
     async def ainvoke(

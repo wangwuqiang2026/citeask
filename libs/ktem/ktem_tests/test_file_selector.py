@@ -110,5 +110,11 @@ def test_a_single_selected_string_is_kept() -> None:
     assert resolve_selection(SELECTOR_MODE_SELECT, "", ALL_FILES) == ALL_FILES
 
 
+def test_a_bare_non_string_value_is_one_selection() -> None:
+    """Gradio can hand back a single value (an id from a dataframe row) instead of a list."""
+    assert resolve_selection(SELECTOR_MODE_SELECT, "f2", ALL_FILES) == ["f2"]
+    assert resolve_selection(SELECTOR_MODE_SELECT, 2, [1, 2, 3]) == [2]
+
+
 def test_the_disabled_mode_scopes_nothing() -> None:
     assert resolve_selection(SELECTOR_MODE_DISABLED, ["f1"], ALL_FILES) == []

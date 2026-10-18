@@ -62,6 +62,8 @@ def test_cosine_similarity_is_bounded_and_safe():
     assert cosine_similarity([], []) == 0.0
     assert cosine_similarity([1.0], [1.0, 2.0]) == 0.0
     assert cosine_similarity(None, [1.0]) == 0.0
+    # a zero vector has no direction: routing must treat it as "no signal", not crash
+    assert cosine_similarity([0.0, 0.0], [1.0, 0.0]) == 0.0
 
 
 def test_the_closest_files_are_ranked_first():
@@ -156,6 +158,12 @@ def test_a_prose_mention_is_not_evidence():
     assert text_names_entity("图书馆一次最多可以借几本书？", PROSE) is False
 
 
+def test_degenerate_input_is_not_evidence():
+    """Routing runs on every question: an empty question or chunk must fall through."""
+    assert text_names_entity("", GRADE_ROW) is False
+    assert text_names_entity("李明辉的综测是多少", "") is False
+
+
 def test_a_long_description_row_does_not_borrow_the_name():
     """A job-description row is tabular too; the entity still has to be in it."""
     description = "002000 中央办公厅 老干部局 综合管理岗位一级主任科员及以下 普通职位"
@@ -195,6 +203,11 @@ def test_entity_evidence_never_widens_the_users_selection():
 
 def test_entity_evidence_is_empty_without_a_name():
     assert entity_evidence_files("图书馆一次最多可以借几本书？", [("pdf", PROSE)], ["pdf"]) == []
+
+
+def test_entity_evidence_is_empty_without_a_selection():
+    """An empty selection must not turn into "search everything"."""
+    assert entity_evidence_files("李明辉的综测是多少", [("points", GRADE_ROW)], []) == []
 
 
 def test_entity_files_are_appended_without_duplicates():

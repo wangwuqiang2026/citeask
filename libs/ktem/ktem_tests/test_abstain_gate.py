@@ -239,6 +239,20 @@ def test_a_topic_word_in_every_chunk_is_not_evidence():
     assert specific_term_evidence("加分细则怎么算", documents) is False
 
 
+def test_evidence_without_a_term_or_a_text_is_not_evidence():
+    """Degenerate input must fall through, not raise (the gate runs on every answer)."""
+    assert specific_term_evidence("", [row_doc(0.40)]) is False
+    assert specific_term_evidence("李明辉的社会实践完成了吗", []) is False
+
+
+def test_require_tabular_false_accepts_any_verbatim_match():
+    """The escape hatch used by tests/tools: every verbatim hit counts, twice over."""
+    documents = [row_doc(0.40, text="李明辉 75.45"), row_doc(0.40, text="李明辉 75.45")]
+
+    assert specific_term_evidence("李明辉", documents) is False  # not a row, not a cell
+    assert specific_term_evidence("李明辉", documents, require_tabular=False) is True
+
+
 def test_abstain_events_answers_a_table_row_below_the_threshold(monkeypatch):
     """End to end through the pipeline helper: no refusal event is emitted."""
     monkeypatch.setattr(simple_module, "abstain_threshold", lambda: 0.45)

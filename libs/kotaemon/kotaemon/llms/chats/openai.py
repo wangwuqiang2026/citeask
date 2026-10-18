@@ -1,5 +1,6 @@
 from typing import TYPE_CHECKING, AsyncGenerator, Iterator, Optional, Type
 
+import openai
 from pydantic import BaseModel
 from theflow.utils.modules import import_dotted_string
 
@@ -12,6 +13,7 @@ from kotaemon.base import (
     StructuredOutputLLMInterface,
 )
 
+from ..usage import usage as _usage
 from .base import ChatLLM
 
 if TYPE_CHECKING:
@@ -189,6 +191,13 @@ class BaseChatOpenAI(ChatLLM):
             ],
             logprobs=logprobs,
         )
+        # feed the process-wide counter so a query trace can report what one answer
+        # cost (kotaemon/llms/usage.py)
+        _usage.add(
+            prompt_tokens=output.prompt_tokens,
+            completion_tokens=output.completion_tokens,
+            total=output.total_tokens,
+        )
 
         return output
 
@@ -236,12 +245,27 @@ class BaseChatOpenAI(ChatLLM):
     ) -> Iterator[LLMInterface]:
         client = self.prepare_client(async_version=False)
         input_messages = self.prepare_message(messages)
-        resp = self.openai_response(
-            client, messages=input_messages, stream=True, **kwargs
-        )
+
+        # Ask for the token usage of the final chunk: a streaming answer is otherwise
+        # invisible to the usage counter (kotaemon/llms/usage.py), which the query
+        # trace reports as the cost of one answer. Providers that do not accept the
+        # parameter still work — the request is retried without it.
+        try:
+            resp = self.openai_response(
+                client,
+                messages=input_messages,
+                stream=True,
+                stream_options={"include_usage": True},
+                **kwargs,
+            )
+        except (TypeError, openai.BadRequestError, openai.UnprocessableEntityError):
+            resp = self.openai_response(
+                client, messages=input_messages, stream=True, **kwargs
+            )
 
         for c in resp:
             chunk = c.dict()
+            self._record_usage(chunk.get("usage"))
             if not chunk["choices"]:
                 continue
             if chunk["choices"][0]["delta"]["content"] is not None:
@@ -258,6 +282,17 @@ class BaseChatOpenAI(ChatLLM):
                 yield LLMInterface(
                     content=chunk["choices"][0]["delta"]["content"], logprobs=logprobs
                 )
+
+    @staticmethod
+    def _record_usage(usage_block: Optional[dict]) -> None:
+        """Feed one response's usage block into the process-wide counter."""
+        if not usage_block:
+            return
+        _usage.add(
+            prompt_tokens=usage_block.get("prompt_tokens", 0) or 0,
+            completion_tokens=usage_block.get("completion_tokens", 0) or 0,
+            total=usage_block.get("total_tokens", 0) or 0,
+        )
 
     async def astream(
         self, messages: str | BaseMessage | list[BaseMessage], *args, **kwargs
@@ -375,6 +410,11 @@ class StructuredOutputChatOpenAI(ChatOpenAI):
             ],
             additional_kwargs=additional_kwargs,
             logprobs=logprobs,
+        )
+        _usage.add(
+            prompt_tokens=output.prompt_tokens,
+            completion_tokens=output.completion_tokens,
+            total=output.total_tokens,
         )
 
         return output

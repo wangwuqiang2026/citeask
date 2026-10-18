@@ -12,6 +12,7 @@ from ktem.utils.selector import (
     SELECTOR_MODE_DISABLED,
     SELECTOR_MODE_SELECT,
     SELECTOR_STATE_SENTINEL,
+    resolve_selection,
     resolve_selector_user_id,
 )
 
@@ -75,3 +76,39 @@ def test_stale_selector_state_does_not_leak_into_the_query(
         resolve_selector_user_id(session_user_id, selector_user_id)
         != SELECTOR_STATE_SENTINEL
     )
+
+
+# --------------------------------------------------------------------------- #
+# which files a retrieval is scoped to
+# --------------------------------------------------------------------------- #
+ALL_FILES = ["f1", "f2", "f3"]
+
+
+def test_search_all_returns_every_file() -> None:
+    assert resolve_selection(SELECTOR_MODE_ALL, None, ALL_FILES) == ALL_FILES
+
+
+def test_search_in_file_returns_the_picked_files() -> None:
+    assert resolve_selection(SELECTOR_MODE_SELECT, ["f2"], ALL_FILES) == ["f2"]
+
+
+def test_an_empty_selection_falls_back_to_every_file() -> None:
+    """"Search in File(s)" with an empty dropdown is not "search nothing".
+
+    Refreshing the file list (an upload rewrites the dropdown's choices) clears the
+    value; returning ``[]`` made the retriever skip retrieval, and the chat then claimed
+    "the knowledge base has no evidence (best match 0.00)" for a corpus that answers
+    fine (MODIFICATIONS §5.16).
+    """
+    assert resolve_selection(SELECTOR_MODE_SELECT, [], ALL_FILES) == ALL_FILES
+    assert resolve_selection(SELECTOR_MODE_SELECT, None, ALL_FILES) == ALL_FILES
+    assert resolve_selection(SELECTOR_MODE_SELECT, ["", None], ALL_FILES) == ALL_FILES
+
+
+def test_a_single_selected_string_is_kept() -> None:
+    assert resolve_selection(SELECTOR_MODE_SELECT, "f3", ALL_FILES) == ["f3"]
+    assert resolve_selection(SELECTOR_MODE_SELECT, "", ALL_FILES) == ALL_FILES
+
+
+def test_the_disabled_mode_scopes_nothing() -> None:
+    assert resolve_selection(SELECTOR_MODE_DISABLED, ["f1"], ALL_FILES) == []

@@ -53,3 +53,41 @@ def resolve_selector_user_id(
     if session_user_id is not None:
         return session_user_id
     return selector_user_id
+
+
+def resolve_selection(
+    mode: Any, selected: Any, all_file_ids: list[Any]
+) -> list[Any]:
+    """The file ids a retrieval should be scoped to.
+
+    "Search in File(s)" with an **empty** dropdown is not a request to search
+    nothing: it happens after the file list is refreshed (an upload rewrites the
+    dropdown's choices and clears its value), and returning ``[]`` here made the
+    retriever skip retrieval entirely — the chat then said "the knowledge base has no
+    evidence (best match 0.00)" about a corpus that answers fine (MODIFICATIONS §5.16).
+    An empty selection therefore falls back to every file, which is also what the user
+    expected before the refresh.
+
+    Args:
+        mode: the selector's mode (``all`` / ``select`` / ``disabled``).
+        selected: the dropdown value; may be ``None``, a string or a list.
+        all_file_ids: every file id the current user owns.
+
+    Returns:
+        The file ids to scope the retrieval to (empty only for ``disabled``).
+    """
+    if mode == SELECTOR_MODE_DISABLED:
+        return []
+    if mode != SELECTOR_MODE_SELECT:
+        return list(all_file_ids)
+
+    if selected is None:
+        chosen: list[Any] = []
+    elif isinstance(selected, (list, tuple, set)):
+        chosen = [item for item in selected if item not in (None, "")]
+    elif isinstance(selected, str):
+        chosen = [selected] if selected else []
+    else:
+        chosen = [selected]
+
+    return chosen if chosen else list(all_file_ids)

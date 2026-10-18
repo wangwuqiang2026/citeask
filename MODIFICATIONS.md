@@ -9,7 +9,7 @@
 
 ## 一、总体改动一览
 
-### 已跟踪文件的修改（21 个文件，+395 −59 行）
+### 已跟踪文件的修改（21 个文件，+395 −59 行；§2.9/§2.10 的读取器与自愈修复另计 11 个文件 +393 −29 行；§5.4–5.6 的评测/自检/启动工具另计 4 个文件 +350 −33 行，新增路径见 §二各小节）
 
 | 文件 | 类型 | 说明 |
 |---|---|---|
@@ -25,15 +25,24 @@
 | [libs/ktem/ktem/app.py](libs/ktem/ktem/app.py) | **功能新增** | 新增 `set_head_script()`，把词表注入 `<head>`（不能拼进 `js`，见 §3.5） |
 | [libs/ktem/ktem/mcp/ui.py](libs/ktem/ktem/mcp/ui.py) | **功能新增** | MCP 工具面板的运行时标题接入翻译 |
 | [libs/ktem/ktem/pages/help.py](libs/ktem/ktem/pages/help.py) | **功能新增** | Help 页按语言选择文档，支持 `*.zh.md` |
-| [libs/kotaemon/kotaemon/indices/ingests/files.py](libs/kotaemon/kotaemon/indices/ingests/files.py) | **缺陷修复** | `.pdf` 默认抽取器换成 OCR 感知版本（§2.7） |
+| [libs/kotaemon/kotaemon/indices/ingests/files.py](libs/kotaemon/kotaemon/indices/ingests/files.py) | **缺陷修复** | `.pdf` 默认抽取器换成 OCR 感知版本（§2.7）；`.xls` 换成 pandas 本地读取器（§2.9）；`.pptx` 换成 python-pptx 本地读取器（§5.11） |
+| [libs/ktem/ktem/index/file/pipelines.py](libs/ktem/ktem/index/file/pipelines.py) | **缺陷修复** | 索引失败即回滚：不留"幽灵文件"，重试前清掉半成品块（§2.10）；重排器不可用时回退（§5.9） |
+| [libs/ktem/ktem/index/file/ui.py](libs/ktem/ktem/index/file/ui.py) | **缺陷修复** | 文件列表 `loader` 列显示解析失败原因（§2.10） |
+| [libs/ktem/ktem/main.py](libs/ktem/ktem/main.py) | **功能新增** | 启动时在后台调度孤儿文件自愈（§2.10） |
 | [libs/kotaemon/kotaemon/loaders/\_\_init\_\_.py](libs/kotaemon/kotaemon/loaders/__init__.py) | **功能新增** | 导出 `OCRPDFReader` |
 | [libs/kotaemon/kotaemon/embeddings/fastembed.py](libs/kotaemon/kotaemon/embeddings/fastembed.py) | **缺陷修复** | 补 `query_prefix` / `passage_prefix`（E5 系列必需，见 §9.4） |
-| [libs/kotaemon/kotaemon/embeddings/openai.py](libs/kotaemon/kotaemon/embeddings/openai.py) | **缺陷修复** | 补 `batch_size` 分批（通义单次上限 25 条，见 §9.4） |
+| [libs/kotaemon/kotaemon/embeddings/openai.py](libs/kotaemon/kotaemon/embeddings/openai.py) | **缺陷修复** | 补 `batch_size` 分批；再补「按服务端给出的上限自适应」（§2.10，通义真上限是 10 而非 25） |
+| [libs/kotaemon/kotaemon/llms/chats/openai.py](libs/kotaemon/kotaemon/llms/chats/openai.py) | **功能新增** | 记录每次调用的 usage（含流式最后一帧，§5.10） |
 | [.env.example](.env.example) | 工程化 | 补充通义 key、本地向量模型、语言、OCR 等配置项 |
-| [libs/kotaemon/pyproject.toml](libs/kotaemon/pyproject.toml) | 依赖 | 新增 `rapidocr-onnxruntime`、Windows 下的 `python-magic-bin` |
-| [flowsettings.py](flowsettings.py) | **功能集成** | DeepSeek + 本地 FastEmbed 接入；4 个语言配置项（含回答语言） |
+| [libs/kotaemon/pyproject.toml](libs/kotaemon/pyproject.toml) | 依赖 | 新增 `rapidocr-onnxruntime`、Windows 下的 `python-magic-bin`、`.xls` 所需的 `xlrd`（§2.9） |
+| [libs/kotaemon/tests/test_ingestor.py](libs/kotaemon/tests/test_ingestor.py) | 测试 | `.xls` 读取器路由的回归测试（§2.9） |
+| [libs/kotaemon/tests/test_table_reader.py](libs/kotaemon/tests/test_table_reader.py) | 测试 | 断言 `xlrd` 引擎在位（§2.9） |
+| [flowsettings.py](flowsettings.py) | **功能集成** | DeepSeek + 本地 FastEmbed 接入；4 个语言配置项（含回答语言）；通义批大小 10、`KH_REPAIR_ORPHAN_FILES`（§2.10）、切块 512/64（§5.7）、拒答阈值 0.45（§5.8） |
+| [libs/ktem/ktem/reasoning/simple.py](libs/ktem/ktem/reasoning/simple.py) | **功能新增** | 三条对话路径接入拒答闸门（§5.8）；正常/拒答两条路径都写查询 trace（§5.10） |
 | [libs/ktem/pyproject.toml](libs/ktem/pyproject.toml) | 依赖 | 新增 `deep-translator` |
 | [.gitignore](.gitignore) | 工程化 | 忽略运行时缓存目录 |
+| [tools/eval_retrieval.py](tools/eval_retrieval.py) | **功能新增** | 分类指标、`--scope`、`--rerank`、`--fail-under-hit1`、退出码语义（§5.4） |
+| [.github/workflows/tests.yaml](.github/workflows/tests.yaml) | 工程化 | 纳入 `tools/tests`；新增"新增模块覆盖率"报告步骤（A2） |
 
 > `uv.lock` 另有约 4500 行 diff，但**版本发生变化的包为 0 个**：uv 0.11.13 把 lockfile 格式
 > 从 `revision = 1` 升到 `revision = 3`，并给每条记录补了 `upload-time` 字段，详见 §3.9。
@@ -52,6 +61,26 @@
 | [README.md](README.md) | — | 项目门面：定位、架构、亮点、指标、快速开始 |
 | [libs/ktem/ktem/utils/i18n.py](libs/ktem/ktem/utils/i18n.py) | 1054 | 采集显示属性 → 调翻译库/模型 → 落盘词条缓存 → 回写 UI；含运行时翻译层（`tr` / `translate_message` / `install_hooks` / `bootstrap_js`）与源码串提取 |
 | [libs/ktem/ktem_tests/test_file_selector.py](libs/ktem/ktem_tests/test_file_selector.py) | 64 | 检索范围缺陷的回归测试（10 个用例） |
+| [libs/ktem/ktem/index/file/repair.py](libs/ktem/ktem/index/file/repair.py) | 246 | 孤儿文件自愈：找出「有行无向量」的文件并重新解析（§2.10） |
+| [libs/ktem/ktem_tests/test_orphan_repair.py](libs/ktem/ktem_tests/test_orphan_repair.py) | 376 | 上述自愈的测试（10 个用例，含半成品判定、重试记账、失败回滚） |
+| [libs/kotaemon/tests/test_embedding_batching.py](libs/kotaemon/tests/test_embedding_batching.py) | 150 | 向量批大小自适应测试（9 个用例，假 provider，离线） |
+| [tools/doctor.py](tools/doctor.py) | 380 | 自检命令：索引完整性、空块、配置是否真生效、检索 smoke（§5.5） |
+| [tools/tests/test_doctor.py](tools/tests/test_doctor.py) | 190 | 自检判定逻辑的测试（16 个用例） |
+| [tools/tests/test_eval_retrieval.py](tools/tests/test_eval_retrieval.py) | 250 | 评测打分/分类/范围/退出码的测试（13 个用例） |
+| [tools/eval/README.md](tools/eval/README.md) | — | 评测说明：口径、题目格式、换语料与加题纪律（§5.4） |
+| [scripts/bootstrap_windows.ps1](scripts/bootstrap_windows.ps1) | 145 | 一键启动：Python 3.10 → uv sync → .env → 启动（§5.6） |
+| [libs/kotaemon/kotaemon/abstain.py](libs/kotaemon/kotaemon/abstain.py) | 60 | 拒答闸门的纯逻辑：忽略关键词哨兵分、阈值判定（§5.8） |
+| [libs/ktem/ktem_tests/test_abstain_gate.py](libs/ktem/ktem_tests/test_abstain_gate.py) | 150 | 闸门与审计日志的测试（13 个用例） |
+| [tools/eval/zh-no-answer.json](tools/eval/zh-no-answer.json) | 12 题 | 无答案集：校准拒答阈值（§5.8） |
+| [libs/kotaemon/kotaemon/rerankings/local_lexical.py](libs/kotaemon/kotaemon/rerankings/local_lexical.py) | 120 | 零依赖本地词法重排（中文 bigram 覆盖；只重排不丢块，保留原相似度）（§5.9） |
+| [libs/kotaemon/kotaemon/rerankings/resolve.py](libs/kotaemon/kotaemon/rerankings/resolve.py) | 45 | 重排器选择：配置了但不可用（Cohere 无 key）时回退到本地（§5.9） |
+| [libs/ktem/ktem_tests/test_local_reranker.py](libs/ktem/ktem_tests/test_local_reranker.py) | 190 | 词法打分/重排/回退的测试（20 个用例） |
+| [libs/kotaemon/kotaemon/llms/usage.py](libs/kotaemon/kotaemon/llms/usage.py) | 70 | 进程级 LLM 用量记账（调用数/token），供 trace 取每题 delta（§5.10） |
+| [libs/ktem/ktem/utils/trace.py](libs/ktem/ktem/utils/trace.py) | 110 | 每题 trace（JSONL）：召回数/最高分/拒答/延迟/token，`KH_QUERY_TRACE` 开关（§5.10） |
+| [tools/trace_report.py](tools/trace_report.py) | 150 | trace 聚合报告：拒答率、P50/P95、每题 token 与调用数（§5.10） |
+| [tools/tests/test_trace.py](tools/tests/test_trace.py) | 200 | 用量计数/trace 记录/聚合的测试（12 个用例） |
+| [libs/kotaemon/kotaemon/loaders/pptx_loader.py](libs/kotaemon/kotaemon/loaders/pptx_loader.py) | 150 | 本地 `.pptx` 读取器：一页一条、表格转 CSV、带备注（§5.11） |
+| [libs/kotaemon/tests/test_pptx_reader.py](libs/kotaemon/tests/test_pptx_reader.py) | 130 | 上述读取器的测试（6 个用例，夹具现场生成） |
 | [libs/ktem/ktem_tests/test_i18n.py](libs/ktem/ktem_tests/test_i18n.py) | 567 | 本地化层测试（41 个用例，全程不联网） |
 | [docs/about.zh.md](docs/about.zh.md) | 7 | Help 页「关于」中文版 |
 | [docs/usage.zh.md](docs/usage.zh.md) | 56 | Help 页「使用指南」中文版 |
@@ -246,8 +275,97 @@ def resolve_selector_user_id(session_user_id, selector_user_id):
 现在提问时若**没有任何可检索文件**，会直接弹提示说明原因（未上传/未索引完成，或未勾选文件），
 而不是让用户对着 `No evidence found.` 猜。
 
-> 影响范围提示：`.pptx`、`.xls`、`.doc` 仍走 `unstructured`，在同样的环境里可能遇到相同问题；
+> 影响范围提示：`.pptx`、`.doc` 仍走 `unstructured`，在同样的环境里可能遇到相同问题；
 > 需要时按同样方式换成本地读取器（`DocxReader`/`PandasExcelReader` 等已在仓库内）。
+> `.xls` 已按 §2.9 处理完毕。
+
+---
+
+### 2.9 同类缺陷四：`.xls`（老版 Excel）上传直接失败，索引 0 块
+
+**(a) 现象**：上传 `中央机关…考试录用公务员招考简章.xls`（9.6 MB）后，文件列表里**有这一行**，
+但 `loader` 与 `tokens` 两列都是 `-`；在对话页勾选该文件问「帮我看一下哪里有邵阳的岗位」，
+回答是"没有联网能力"之类，引用栏 `No evidence found.`。
+
+**(b) 定位**：`index__1__source.note` 为 **`{}`**（对比同批的 `.docx` 是
+`{"tokens": 2429, "loader": "DocxReader"}`），`index__1__index` 里该 source **0 个文档块**；
+对话记录里 `retrieval_messages` 就是 `No evidence found.`。再用两种读取器直接读同一份文件：
+
+| 读取器 | 结果 |
+|---|---|
+| `unstructured`（原默认） | ❌ `ImportError: Missing optional dependency 'xlrd'` —— 它的 `partition` 对 `.xls` 也走 pandas |
+| `PandasExcelReader` | ❌ 同一异常（`pd.read_excel` 同样需要 `xlrd`） |
+
+**(c) 根因**：两层叠加。
+1. 仓库只声明了 `openpyxl`（它只认 `.xlsx`），**没有任何地方声明 `xlrd`**，所以 `.xls` 无论走哪条路都读不出来；
+2. 即使装上 `xlrd`，`.xls` 默认还挂在 `unstructured` 上，而它在 Windows 上还要 LibreOffice 做格式转换（本机没有）。
+
+异常被 `IndexDocumentPipeline.stream` 吞成一条 `status: failed` 的流式事件，上传框一闪而过。
+
+**(d) 修复**：
+1. [libs/kotaemon/pyproject.toml](libs/kotaemon/pyproject.toml) 增加 `xlrd>=2.0.1,<3`（并同步 `uv.lock`）；
+2. [libs/kotaemon/kotaemon/indices/ingests/files.py](libs/kotaemon/kotaemon/indices/ingests/files.py) 把
+   `KH_DEFAULT_FILE_EXTRACTORS[".xls"]` 由 `unstructured` 换成 `PandasExcelReader()`，与 `.xlsx`
+   共用同一条**纯本地**路径（无系统依赖、不联网、不需要 LibreOffice）。
+
+**(e) 验证**：`PandasExcelReader` 读该 9.6 MB 文件 **1.9 s**、出 1 篇文档、**6,858,508 字符**，
+首行即表头「部门代码 部门名称 用人司局 机构性质 …」；新增回归测试
+`test_xls_is_read_locally_by_pandas`（路由不落回 unstructured）与
+`test_xls_engine_available`（`xlrd` 引擎在位），连同 `test_ingestor.py` / `test_table_reader.py`
+共 **5 passed, 1 skipped**；CI 那套测试子集 **62 passed**（其余 26 个是沙箱里 `tmp_path` 建不出来的环境问题，与本次改动无关）。
+
+**(f) 已经失败过的文件不会自己变好**：Source 行还在库里、块还是 0 个，必须重新解析一次 ——
+现在这一步由 §2.10 的启动自愈自动完成（重启应用即可）；也可以手动：应用**停止**时跑
+`python tools/reindex_corpus.py --match 中央机关`，或在「上传并索引」勾选 `Force reindex file` 重传。
+
+> 影响范围提示：`.doc`、`.pptx` 仍走 `unstructured`；`.csv` 虽出现在可上传类型里，
+> 但没有专门的抽取器（会落到 `unstructured`），需要的话同样换成 pandas 读取器。
+
+---
+
+### 2.10 根治：解析/索引失败不再变成「幽灵文件」，并在启动时自动修好历史遗留
+
+§2.7、§2.8、§2.9 是**同一形状的三次复现**：解析或建索引抛异常 → 异常被当成一条流式事件闪过 →
+`Source` 行留在库里、块（尤其向量）一个没有。用户侧固定三步：文件列表里有这一行 → 提问时勾选它 →
+`No evidence found.`。每次都得靠人工发现"这个文件其实没进索引"，再手工重建。
+
+**(a) 三处代码改动**
+
+1. **失败即回滚**（[pipelines.py](libs/ktem/ktem/index/file/pipelines.py) `IndexPipeline._handle_failed_indexing`）：
+   - 上传失败：这次尝试自己新建的 `Source` 行连同存储副本一起删掉，用户看到上传框的 ❌ + 原因，**重传即可**，
+     不会再撞 "already indexed"；
+   - 自愈重试失败：保留用户的 `Source` 行，但把**已写入的半成品块删掉**——索引先写文档库、后写向量库，
+     失败时真的会留下「10237 个文档块 / 0 个向量块」这种看起来已索引、实际检索不到的状态。
+   - `delete_file` 现在同时删除磁盘上的存储副本（原来只删库，文件永久占盘）。
+
+2. **启动自愈**（新增 [repair.py](libs/ktem/ktem/index/file/repair.py)，由
+   [main.py](libs/ktem/ktem/main.py) `App.repair_orphan_files` 在启动时起后台线程）：
+   扫描「有 `Source` 行但**没有向量块**」的文件，用存储副本 + 原文件名重新解析并索引。
+   修好读取器/批大小后，老文件**下次启动自动补进索引**，不需要人工 Force reindex。
+   每个文件最多重试 3 次（`note["repair_attempts"]`），避免坏文件每次开机都重算；开关 `KH_REPAIR_ORPHAN_FILES`（默认开）。
+
+3. **失败可见**（[ui.py](libs/ktem/ktem/index/file/ui.py) `describe_loader`）：文件列表 `loader` 列对失败的
+   文件显示 `⚠ <原因>`（如 `⚠ Missing optional dependency 'xlrd'`），一眼区分"没解析成功"和"已索引"。
+
+**(b) 同时修掉的一个更硬的上游缺陷：向量批大小**（[openai.py](libs/kotaemon/kotaemon/embeddings/openai.py)）
+`batch_size` 配的是 25（按文档写的"通义单次上限"），但 `text-embedding-v3` 实测**上限是 10**，接口直接 400。
+后果：**任何超过 10 块的文件都永远建不进索引**（3~4 块的小文件正好绕过）。现在两层修复：
+配置里改成 10；并且客户端在服务端报「batch size is invalid ... not larger than 10」时会**自动采用服务端报出的上限**
+（无数字则折半），并把该上限记在实例上，一次踩坑、整轮不再复发。回归测试 `test_embedding_batching.py`（9 例）。
+
+**(c) 验证**（本机实测）
+- 修复前该 `.xls`：`docs=10237, vecs=0, note={}` —— 文件在列表里、检索返回 0 条；
+- 修复后由启动自愈自动重解析（未手工重建）：`docs=10237, vecs=10237, note={"tokens": 6983734, "loader": "PandasExcelReader"}`，
+  索引耗时 593 s（通义每次 10 条，约 1000 次请求）；
+- **检索实测**：勾选该文件问「哪里有邵阳的岗位」→ **10/10 命中**邵阳岗位行，
+  Top1 = 0.567「国家税务总局邵阳市税务局 … 湖南省邵阳市北塔区 …」（改前是 `No evidence found.`）；
+- 回归测试：`test_orphan_repair.py` 10 例（孤儿按向量判定、半成品也算孤儿、原名还原、失败保留上传、
+  重试计数落在**重建后的新行**上、重试上限、按 owner 解析、loader 列、失败回滚/清块的决策），
+  `test_embedding_batching.py` 9 例（分批、按服务端上限重试、折半退化、无关错误不重试、顺序还原）。
+
+**(d) 为什么不是"手动重建一次"**：这三个缺陷的共同点是**失败被静默吞掉**。只补数据不改机制，
+下次换个格式/换个模型上限还会重演；改动后失败会回滚、会记原因、会在启动时自愈。
+
 
 ---
 
@@ -588,6 +706,297 @@ uv sync --python 3.10 --no-install-package llama-cpp-python
 
 按上游 README 下载 `pdfjs-4.0.379-dist.zip` 解压到 `libs/ktem/ktem/assets/prebuilt/`，
 用于问答结果的 PDF 原文高亮预览。该目录被 `libs/ktem/.gitignore` 忽略。
+
+### 5.4 评测工具升级（`tools/eval_retrieval.py`）
+
+原来的评测只能给出一个总数字，且退出码是 `return 0 if hit_at_1 == 1.0 else 1`——
+基线就在 60% 上下，等于永远"失败"，无法进 CI。这次补齐四项：
+
+| 能力 | 用法 | 为什么 |
+|---|---|---|
+| 分类指标 | 题目加 `category`（T1 单跳 / T2 数值 / T3 多跳 / T4 无答案） | 一个总数字会掩盖"某一类变好、另一类变坏" |
+| 范围限定 | `--scope "文件名"` | 等价界面上的「在文件中搜索」，让"某份语料多好"可复现 |
+| 重排 A/B | `--rerank on` / `--rerank off` | 把重排器钉成开/关，其余条件不变（B2 的尺子） |
+| 门槛与退出码 | `--fail-under-hit1 0.55`；不设阈值时完成即 0，无语料为 2 | 能进 CI，且不再把"没到 100%"判为失败 |
+
+配套：`tools/eval/README.md`（指标口径、题目格式、如何换语料/加题、当前基线与天花板效应说明）；
+`tools/tests/test_eval_retrieval.py` 13 例（匹配、名次、按类别分组、退出码、范围选择、重排开关），
+全部离线、假 retriever，不需要应用与网络。
+
+**顺带测到的一个问题**：把 10 MB / 10237 块的表格放进同一索引后，同一套 27 题在四块语料上的
+指标从 **Hit@1 55.6% / facts 100%** 掉到 **33.3% / 48.1%**——召回名额被大文件占满。
+这既是"不能只看总指标"的证据，也是一条新的待办（按文件配额 / 多样化重排）。
+
+### 5.5 `doctor` 自检命令（`tools/doctor.py`）
+
+这个项目已经出现过四次"配置写了但功能静默失效"（§2.7–§2.10），把这类状态做成一条命令：
+
+```powershell
+.\.venv\Scripts\python.exe tools\doctor.py                          # 人读表格
+.\.venv\Scripts\python.exe tools\doctor.py --json x.json --strict   # CI 用
+```
+
+检查项：每个文件的 `document` / `vector` 块数与 `note`（**0 向量块 = 列表里有但检索不到**）、
+空文本块比例、向量 provider 与模型、重排器有没有 key、`chunk_size`、`PDF_OCR_ENABLED`、
+启动自愈开关、词表条数，以及 3 道固定题的召回 smoke。任一 FAIL 返回 1，`--strict` 让 WARN 也返回 1。
+
+判断逻辑（哪条算 FAIL / WARN、退出码）抽成纯函数，`tools/tests/test_doctor.py` 16 例覆盖。
+首次实测：12 项检查、0 FAIL / 2 WARN（重排无 key、`chunk_size=0`），与 README「已知限制」一致。
+
+### 5.6 一键启动脚本（`scripts/bootstrap_windows.ps1`）
+
+`uv sync` 在 Windows 上必须带 `--no-install-package llama-cpp-python`（无轮子），这是新手第一个坑；
+脚本把 Python 3.10 检查、依赖同步、`.env` 生成（**已存在则绝不覆盖**）、临时目录重定向与启动串起来。
+纯 ASCII 书写（PowerShell 5.1 读无 BOM 脚本按 GBK 解析，中文会导致语法错误），`-NoStart` 可只准备环境。
+
+**双击入口**：`.ps1` 双击不会执行（Explorer 用记事本打开，或被执行策略拦下），所以根目录另放
+`start.bat`：`cd /d "%~dp0"` → `powershell -ExecutionPolicy Bypass -File scripts\bootstrap_windows.ps1 %*`
+→ 失败时 `pause` 留窗并打印日志路径。它只做转发，参数原样透传。
+
+**双击失败后补的三处（都是真实踩到的）**
+
+1. **不再每次跑 `uv sync`**：默认行为改成"`.venv\Scripts\python.exe` 存在就跳过同步"，
+   只有首次部署或显式 `-ForceSync` 才联网同步。双击失败最常见的根因就是这一步（网络、代理、
+   锁文件解析），而它和"能不能启动"本无关系。
+2. **诊断落盘**：`Start-Transcript` 写 `ktem_app_data/logs/bootstrap-<时间>.log`；应用本身用
+   `cmd /c "… app.py 2>&1" | Tee-Object -Append ktem_app_data/logs/app.log` 输出，
+   窗口关掉也能事后读。注意 **PowerShell 5.1 的 `Start-Transcript` 抓不到原生命令的 stderr**，
+   所以 uv 的调用改走 `cmd /c "uv … 2>&1"` 再 `Write-Host`，否则日志里只剩我们自己的 "uv sync failed"。
+3. **原生 stderr 被当成致命错误**：脚本有 `$ErrorActionPreference = 'Stop'`，而应用启动时会往 stderr
+   打 nltk/absl 警告；一旦写成 `& python app.py 2>&1 | Tee-Object`，PowerShell 把 stderr 包成
+   ErrorRecord 并**直接终止脚本**（实测：窗口一闪、应用根本没起来）。修法是把启动也交给 `cmd /c`
+   （见上一条），PowerShell 只看到 stdout 行。
+
+验证：`cmd /c start.bat` 实测 15 秒内 `HTTP 200`，`app.log` 里有 `Running on local URL: http://127.0.0.1:7860`；
+`-ForceSync` 的失败路径实测退出码 1，且 `bootstrap-*.log` 里含 uv 自己的
+`× Failed to build …` / `Failed to update Windows PE resources`（沙箱限制，非脚本问题）。
+
+**自动打开浏览器**：`app.py` 原本用 `launch(inbrowser=True)`，但 gradio 是在**服务刚起、还没监听**时就
+`webbrowser.open`（而且某些宿主上 `webbrowser.open` 直接无声失败），用户看到的是"没有浏览器弹出"。
+改为由启动脚本负责：
+
+1. 新增 `KH_OPEN_BROWSER_ON_START`（默认 `true`，`python app.py` 行为不变）；
+2. 脚本先设 `KH_OPEN_BROWSER_ON_START=0`（同一个浏览器只开一次，避免双标签页），
+   再起一个后台作业**轮询** `http://127.0.0.1:<port>`，第一次拿到 200 才 `Start-Process <url>`；
+   结果写 `ktem_app_data/logs/browser.log`；
+3. 端口已被占用（已有实例在跑）时直接打开页面并退出，不再重复起一个必然失败的进程；
+4. 端口跟随 `GRADIO_SERVER_PORT`，被占用时可换端口；`-NoBrowser` 可完全关闭。
+
+验证：`cmd /c start.bat` 一次完整启动，`browser.log` 记录 `22:59:19 opened http://127.0.0.1:7860`，
+同一时刻端口返回 `HTTP 200`——即"先就绪、后开页"，不会再出现空标签页。
+
+### 5.7 切块粒度 A/B（ROADMAP B3）
+
+原配置 `chunk_size=0` → 按"页"成块。新增两个配置项（默认 512/64）：
+`FILE_INDEX_PIPELINE_SPLITTER_CHUNK_SIZE` / `..._CHUNK_OVERLAP`，改回 0 即恢复按页成块。
+
+同一套 27 题、同一份四块扫描件，只改切块并重建该文件：
+
+| 口径 | 块数 | Hit@1 | Hit@3 | MRR | 事实覆盖 |
+|---|---|---|---|---|---|
+| 按页成块（chunk_size=0） | 4 | 55.6% | 74.1% | 0.707 | 100% |
+| **512/64** | 11 | **88.9%** | **96.3%** | **0.933** | 100% |
+| 512/64 + 全库（含 1 万块表格） | 11 | 77.8% | 85.2% | 0.832 | 81.5% |
+
+结论：**Hit@1 +33.3 个百分点**。注意块数只从 4 涨到 11（这份材料正文只有 2322 字符），
+所以"块变多"本身解释不了 Hit@1 的提升——变化的是"第一条命中的就是含答案的那个块"。
+副作用也实测了：块变细后，全库口径下大文件仍会摊薄（77.8% vs 88.9%），facts 81.5% vs 100%。
+
+### 5.8 拒答闸门（ROADMAP B4）
+
+**问题**：只要检索返回了东西，模型就会作答——哪怕内容完全不相关。原来的"没有可检索文件才提示"
+只挡住了空集合，挡不住"检索到了不相干的内容"。
+
+**实现**（`libs/kotaemon/kotaemon/abstain.py` + `libs/ktem/ktem/reasoning/simple.py`）：
+
+1. 纯逻辑 `should_refuse(scores, threshold)`：没有召回 → 拒答；只有关键词命中（分数是
+   `-1` 哨兵，见 `vectorindex.py`）→ 不拒答（没有相似度可判）；否则最高相似度低于阈值 → 拒答；
+   `threshold <= 0` 关闭闸门（保留旧行为，可回退）。
+2. 三条对话路径（`FullQAPipeline`、分解式主问题、分解式子问题）在检索后立刻判定，命中即输出
+   "知识库没有依据 + 下一步建议"，**不再调用模型**。
+3. 被拦截的查询写入 `ktem_app_data/abstained_queries.jsonl`（时间、问题、最高分、阈值），路径可用
+   `KH_ABSTAIN_LOG` 覆盖。
+4. 阈值 `KH_ABSTAIN_SCORE_THRESHOLD`（默认 **0.45**），用离线集校准：
+
+| 阈值 | 无答案题正确拒答 | 可答题误拒 |
+|---|---|---|
+| 0.42 | 75.0% | 0% |
+| **0.45** | **91.7%**（11/12） | **0%**（0/27） |
+| 0.53 | 100% | 会误伤（最低正分 0.473） |
+
+> 12 题里唯一没被拒的是「教务处的电话是多少？」（最高分 0.532）：它和语料里的电话号码段落
+> 语义上确实接近，要拒掉它就必须把阈值抬到 0.53，而那会开始误伤正常题。**91.7% / 0% 是这条
+> 曲线上的最优点**，所以阈值定为 0.45——不是拍脑袋的值。
+
+**局限（写清楚，免得被追问）**：这道闸门只看检索分数，不做语义判断；同义但低分的问法会被拒，
+"看似相关其实回答不了"的题仍可能通过。更彻底的做法是答案后校验（C 组待做）。
+
+**表格语料的误拒与修正（2026-10-17 补）**：用户上传 `某班级社会实践完成情况表.xlsx` 后问
+「李明辉的社会实践完成了吗」——界面右侧**明明高亮显示了李明辉那一行**，却被拒答
+（best match 0.38 < 0.45）。原因不是检索失败，而是**单一阈值是用散文语料标定的**：
+一行 `24405010001,李明辉,8,24,2025上半年8学时` 与自然语言问题的向量距离天然偏远。
+
+修正为"罕见实体词 + 表格式行"的二级判定：
+
+1. `entity_terms()`：问题里所有 3 字 CJK 窗口（人名/课程名）与 3+ 位拉丁数字 token（学号/编号）；
+2. `specific_term_evidence()`：某个实体词**逐字出现**在某条召回内容的**表格式行**里
+   （`row_looks_tabular`：≥3 个字段、且 ≥60% 字段含数字），并且**只出现在少数召回块中**
+   （≤30%，否则是主题词而不是某一行）；
+3. `should_refuse(..., documents, question, term_floor)`：分数在 `[KH_ABSTAIN_TERM_FLOOR, 阈值)` 之间
+   且有上述证据时**不拒答**；默认 floor = **0.33**，设 0 可关闭该放宽；
+4. 被拒记录里加了 `reason` 字段，便于事后审计。
+
+关掉"表格式行"这一条会在**散文**里误命中：无答案集里「图书馆一次最多可以借几本书？」的
+`图书馆` 出现在积分细则里，一度把正确拒答从 91.7% 拉到 83.3%；加上"表格式行"后回到 **91.7%**。
+
+实测（同一份 xlsx，用界面「在文件中搜索」的 file-id 口径检索）：
+
+| 问题 | 最高分 | 实体词 | 旧规则（只看 0.45） | 新规则 |
+|---|---|---|---|---|
+| 李明辉的社会实践完成了吗 | 0.382 | ✓ | 拒答 ❌ | **回答** ✅ |
+| 周大鹏的学时是多少 | 0.409 | ✓ | 拒答 ❌ | **回答** ✅ |
+| 吴晓峰的学时 | 0.375 | ✓ | 拒答 ❌ | **回答** ✅ |
+| 郑美玲的社会实践完成了吗 | 0.395 | ✗ | 拒答 ❌ | 拒答 ❌ |
+| 孙小勇完成了吗 | 0.328 | ✓ | 拒答 ❌ | 拒答 ❌（低于 floor） |
+| 郑乐锏的学时是多少 | 0.417 | ✗ | 拒答 ❌ | 拒答 ❌ |
+| 陈志强…（表里没有） | 0.401 | ✗ | 拒答 ✅ | 拒答 ✅ |
+| 李明辉的体重是多少（属性没有） | 0.289 | ✓ | 拒答 ✅ | 拒答 ✅ |
+
+可答题误拒 **6/10 → 3/10**，不可答题 0 误放行；无答案集回归仍 **91.7%**。
+剩下 3 题不是闸门的问题：它们那几行**根本没被召回**（该文件 6 块只返回 3 块），属于"按文件配额 / top_k"
+的召回召回问题。
+
+**拒答文案已本地化**：两段模板走 `tr()`，中文词表新增对应条目，界面为 `zh` 时输出
+「知识库中没有回答这个问题所需的依据（最佳匹配得分 0.38，低于阈值 0.45）」而不是英文原文
+（之前是英文，属于"界面中文、提示英文"的不匹配）。
+
+### 5.9 重排闭环（ROADMAP B2）
+
+**问题**：默认重排器是 Cohere，没有 API key。`run()` 会打印 "Skipping rerankings" 然后**原样返回**——
+界面显示"开着重排"，实际什么也没做。这与 §2.7–§2.10 是同一类"配置写了但没生效"。
+
+**为什么不是 cross-encoder**：roadmap 首选本地 ONNX cross-encoder，但本机 `fastembed` 是 0.4.2
+（没有 `TextCrossEncoder`），且 HuggingFace 模型下载在本机不通。于是先做**不需要任何模型/网络**的本地词法
+重排，作为"重排到底值不值得上"的对照组，也为以后换 cross-encoder 留下同一套测量口径。
+
+**实现**
+
+1. `libs/kotaemon/kotaemon/rerankings/local_lexical.py`：中文字符 bigram + 拉丁词切分，
+   按"问题词被覆盖的比例"给每个块打分；**只重排、默认不丢块**（丢块会把一次可恢复的漏召回变成永久漏召回）。
+2. 分数处理：**保留原检索相似度**，词法分写进 `metadata["rerank_score"]`——拒答闸门（§5.8）是按相似度
+   校准的，重排把分数改掉会静默让那个阈值失效。
+3. `BaseReranking.is_available()` + `resolve_reranker()`：配置了但跑不了的重排器（Cohere 无 key）
+   **自动回退**到本地词法重排，并打印一行说明。这一条同时修掉了"重排显示已开、实际空转"的缺陷。
+4. `KH_RERANKINGS["local"]` 注册（新库会出现在「资源 → 重排」里；老库需重新播种才列出，见下）。
+
+**实测**（27 题，同一套评测，`--rerank off` / `on`；`on` 即回退后的本地词法重排）
+
+| 口径 | 配置 | Hit@1 | Hit@3 | MRR | facts | P50 | P95 |
+|---|---|---|---|---|---|---|---|
+| 单文件（11 块） | off | 88.9% | 96.3% | 0.933 | 100% | 470 ms | 555 ms |
+| 单文件（11 块） | **on** | 88.9% | 96.3% | 0.933 | 100% | 467 ms | 677 ms |
+| 全库（含 1 万块表格） | off | 77.8% | 85.2% | 0.832 | 81.5% | 1053 ms | 1230 ms |
+| 全库（含 1 万块表格） | **on** | 77.8% | **88.9%** | **0.847** | 81.5% | 1303 ms | 1615 ms |
+
+读法：
+- 小语料上**没有收益**（前 10 条本来就排对了），P95 略升——如实记录，不吹；
+- 全库上 **Hit@3 +3.7 个百分点、MRR +0.015**，代价是 P50 +24%（+250 ms）；
+- Hit@1 不变，说明词法重排能纠正"第 2–3 名里的顺序"，纠正不了"第 1 名就错了"——
+  那需要语义重排（cross-encoder）或 §5.7 的切块/检索配额。
+
+**怎么启用/换回**：不需要动代码——默认（无 Cohere key）就会回退到本地重排；希望完全关掉重排就把
+「资源 → 文件集合」里的 `Use reranking` 关掉；装了 Cohere key 则自动用 Cohere。
+老数据库的模型池只在建库时播种，所以 `local` 需重新播种才会出现在下拉框（删掉 `reranking` 表行重启即可）。
+
+### 5.10 成本、延迟与查询 trace（ROADMAP C3 + C4）
+
+**动机**：回答过程是个黑盒。`use_llm_reranking` 默认开着，意味着**每个召回块各调一次 LLM 打相关性分**，
+但没人知道这为每题多花了多少次调用、多少 token；出问题时也说不清"这次回答为什么是这样"。
+
+**实现**
+
+1. **用量记账**（`libs/kotaemon/kotaemon/llms/usage.py`）：进程级线程安全计数器；
+   `BaseChatOpenAI` 在非流式响应（`prepare_output`）与**流式最后一帧**（`stream_options.include_usage`，
+   不支持该参数的 provider 会自动去掉参数重试）记账。
+2. **每题 trace**（`libs/ktem/ktem/utils/trace.py`）：JSONL 一行一题，字段
+   `question / retrieved / top_score / reranked / abstained / answer_chars / total_ms / calls /
+   prompt_tokens / completion_tokens / total_tokens`；由 `FullQAPipeline.stream` 在正常作答与拒答两条路径都写。
+   开关 `KH_QUERY_TRACE`（空=关，`1`=`ktem_app_data/query_trace.jsonl`，其它=路径）；写失败只记日志，绝不影响作答。
+3. **聚合报告**（`tools/trace_report.py`）：请求数、拒答率、端到端 P50/P95、每题 token / LLM 调用数 / 召回块数、
+   启用重排比例；`--last N` 可只取文件末尾 N 条（两个 A/B 跑进同一文件时用）。
+
+**实测**（同一 6 题、真实 DeepSeek 调用、单文件范围）
+
+| `use_llm_reranking` | 每题 LLM 调用 | 每题 token（6 题合计） | 端到端 P50 | P95 |
+|---|---|---|---|---|
+| 关 | **1.0** | **3291（19744）** | 2564 ms | 3530 ms |
+| 开（原默认） | **11.0** | **9043（54257）** | 2955 ms | 4027 ms |
+
+**决策**：把 `use_llm_reranking` 的默认值改成**关**（`USE_LLM_RERANKING=false`，勾选框仍可打开）。
+理由：它每题多花 **10 次 LLM 调用 / +5752 token（+175%）**，而作用只是给证据面板按 LLM 相关性排序
++ 触发低相关提示；关掉后证据面板仍按检索顺序展示，行为降级但不失效。省下来的调用留给答案本身。
+
+**怎么复现**
+
+```powershell
+$env:KH_QUERY_TRACE="$env:TEMP\trace-off.jsonl"
+# 用 tools 里的探针或直接对话几题，然后：
+.\.venv\Scripts\python.exe tools\trace_report.py --trace $env:TEMP\trace-off.jsonl
+```
+
+**局限**：① 只有 provider 返回 usage 时 token 才准（通义/DeepSeek 都支持，不支持则记 0，不做估算）；
+② trace 是**进程级 delta**，同一进程里并发的两题会各自包含时间窗口内的调用，不适合高并发场景；
+③ 端到端延迟包含答案生成，不是纯检索延迟（纯检索延迟见 §5.7/§5.9 的评测表）。
+
+### 5.11 `.pptx` 本地读取器（ROADMAP C5）
+
+`.pptx` 之前和 `.docx` / `.xls` 走同一条 `unstructured` 路线（要系统 `libmagic`，首次还联网取资源），
+在本机属于"上传了但没进索引"。这次换成纯本地读取器：
+
+- `libs/kotaemon/kotaemon/loaders/pptx_loader.py`：`python-pptx` 读取，**一页一张 Document**：
+  形状文本按顺序、表格渲染成 CSV、**备注页**（speaker notes）一并带上；
+  `page_label` = 幻灯片序号，于是引用面板和 PDF 一样显示「第 N 页」，元数据契约不变。
+  纯图片页跳过；整份没有文字时仍返回 1 条空文档——这样"空幻灯片"和"解析失败"在文件列表/`doctor` 里可区分。
+- 依赖：`libs/kotaemon/pyproject.toml` 增加 `python-pptx>=1.0,<2`（uv.lock 同步：新增
+  `python-pptx 1.0.2` + `xlsxwriter 3.2.9`，共 +37 行）。
+- 路由：`KH_DEFAULT_FILE_EXTRACTORS[".pptx"]` 由 `unstructured` 改为 `PptxReader()`。
+- 测试：`libs/kotaemon/tests/test_pptx_reader.py` 6 例（幻灯片分页/表格 CSV/备注/extra_info/空稿/文件不存在），
+  **.pptx 由 python-pptx 在测试里现场生成**，仓库里不放二进制夹具；`test_ingestor.py` 再断言一次路由。
+- `.doc`（老二进制 Word）仍留在 `unstructured`：python-docx 不支持它，本机也没有 LibreOffice，
+  无法诚实地宣称支持。
+
+### 5.12 引用"预览原文"链接失效的修复
+
+**现象**：重建索引或启动自愈之后，引用面板的「预览」打不开，日志里反复刷
+`pdf-path: …\repair_src\xxx.xls does not exist`。
+
+**根因**（两层）：
+1. 存储副本按**裸内容哈希**落盘（没有扩展名），于是块的 `file_path` 只能指向当时的**工作副本**——
+   上传缓存、或重建工具的 `*_src` 目录；工具结束时会删掉那个目录，路径就悬空了。
+2. 即使指向存储目录也不够：Gradio 的 `/file=` 只允许 `GRADIO_TEMP_DIR` 与 assets，
+   存储目录不在白名单里，会 403。
+
+**修复**
+1. `stored_file_name()`：副本命名为 `<hash><扩展名>`，`Source.path` 同名，**不多存一份**；
+   索引时把 `metadata["file_path"]` 指向这份副本（有扩展名，PDF 阅读器能识别）。
+2. `app.py` 的 `allowed_paths` 加入 `KH_FILESTORAGE_PATH`，`/file=` 可以取到它。
+3. `Render.preview` 只对 **PDF** 检查文件是否存在并按需告警——非 PDF 本来就不会进阅读器，
+   以前每渲染一条引用就打印一次，把日志淹了。
+
+**验证**
+- 重建那份 PDF 后：块元数据 `file_path = …\user_data\files\index_1\<hash>.pdf`、`os.path.isfile` 为真；
+- `/file=<存储副本>` 返回 **HTTP 200 / 14 MB / application/pdf**；旧临时路径按预期 **403**；
+- 测试 `libs/ktem/ktem_tests/test_stored_paths.py` 8 例（命名、路径穿越、旧裸哈希兼容、
+  PDF 有/无文件、非 PDF 不告警）。
+
+**局限**：老数据里裸哈希的副本仍然可用（`repair`/`reindex` 都能读），但其块的 `file_path` 仍指向旧路径，
+**重建一次**才会更新；新上传的文件立刻正确。
+
+
+
+
+
+
 
 ---
 
@@ -941,8 +1350,445 @@ catalog = load_catalog("zh")
 - [x] 仓库占用从 7.1 GB 清理到约 2.0 GB（删未用模型缓存 + 未使用的 torch，§6.3）
 - [x] `.docx` 索引失败已修复：默认读取器换成纯本地的 `DocxReader`（§2.8）
 - [x] 没有任何可检索文件时给出明确提示，而不是静默返回 `No evidence found.`（§2.8(f)）
+- [x] 闸门认"竖排表格"（一格一行）：现场「李明辉进省赛了吗」0.412 不再误拒（§5.19）
+- [x] 关键词通道在全库/小选集下都能命中：`prefilter=True` 改成后置过滤（§5.19）
+- [x] 关键词命中不再压过相似度匹配（27 题误拒 59.3% → 3.7%，§5.19）
+- [x] 路由补回"表里有这个人"的文件：问奖学金时成绩表不再被排除在检索范围外（§5.20）
+- [ ] 大表（>500 块）里的某一行仍搜不到，实体补充按体积跳过（§5.20 局限）
+- [ ] 闸门仍判断不了"实体在、属性不在"（问体重/不存在的名次仍会硬答），需要答案级校验（§5.19 局限 1）
+- [ ] 同一问题跨进程候选集不稳定（q27 两次评测分别含/不含 0.535 的块），根因未定位（§5.19 局限 2）
 - [ ] 用本地 ONNX cross-encoder 替换空配置的 Cohere 重排，并用同一套评测量化提升（§9.5）
 - [ ] 切块粒度仍是「页」（`chunk_size=0`），细化后应能提升 Hit@1
 - [ ] `.pptx` / `.xls` / `.doc` 仍走 `unstructured`（受同一 `libmagic` + 403 影响），
       需要时按 `.docx` 的方式换成本地读取器
 - [ ] OCR 只处理「整页文字层不足」的情形；混排页面（部分正文是图）仍可能漏内容。
+
+### 5.13 按文件补齐召回（"有时候问问题都没匹配到正确的文档"）
+
+**现象**：问「李明辉的社会实践完成的怎么样」（**全部搜索**），信息面板里全是
+`积分细则.pdf` 的第 2、3 页，那份 `社会实践完成情况表.xlsx` 一行都没出现，最后被拒答（0.35）。
+
+**根因（不是闸门）**：一次向量查询在**整个索引**里按相似度排序取前 10。语料里有那份
+1 万块的 `.xls`（公务员简章），它的块相似度普遍 0.33–0.35；而表格行
+`24405010001,李明辉,8,24,2025上半年8学时` 与自然语言问题的相似度只有 ~0.34-0.41，
+**挤不进 30 个候选**。也就是说：答案在库里，但不在上下文里。
+
+**实现**（`libs/ktem/ktem/utils/retrieval.py` + `index/file/pipelines.py`）：
+
+1. 候选扩大 `KH_RETRIEVAL_CANDIDATES`（默认 3×top_k）——给后面的名额分配留空间；
+2. **缺席补查**：先看这次检索结果覆盖了哪些文件，凡是被选中的文件**一个块都没有**的，
+   单独为它查一次（`KH_RETRIEVAL_MAX_FILES` 默认 8，`KH_RETRIEVAL_PER_FILE_K` 默认 3）；
+   只有当"某个文件彻底缺席"时才付这次查询的代价；
+3. **按文件轮转取块**：`diversify_by_source()` 让"每个文件最好的块"排在"任何文件的第二块"之前，
+   避免大文件继续霸占名额；
+4. **查询向量只算一次**：`VectorRetrieval.run` 新增 `query_embedding` 入参，补查时复用，
+   否则每个文件都要重新 embed（实测延迟 1076 → 2400 ms 降到 1347 ms）。
+
+**实测**（4 个文件、全库检索、同一批问题）
+
+| 问题 | 关掉按文件补齐 | 打开 |
+|---|---|---|
+| 李明辉的社会实践完成的怎么样 | 0.347，上下文里**没有**李明辉，拒答 | **0.372，命中表格行，作答** |
+| 周大鹏的学时是多少 | 0.372，只覆盖 1 个文件，拒答 | **0.409，作答** |
+| 陈志强的社会实践完成了吗（表里没有） | 拒答 | 拒答（正确） |
+
+- 上下文覆盖文件数：1–2 → **4**；
+- 检索延迟：P50 **1076 → 1347 ms**（+271 ms，+25%），只发生在"确实有文件缺席"时；
+- 开关：`KH_RETRIEVAL_PER_FILE`（默认开），可回退到原来的全局 top-k。
+
+### 5.14 文件档案与按文件路由（"记住每个文件是干什么的"）
+
+**需求**：不必每次都把全部文件检索一遍——给每个文件留一条"这个文件是干什么的"记录，
+提问时先按记录挑文件，再只在挑中的文件里检索。
+
+**档案怎么来的（不额外花钱）**：索引完成时用**已抽取的正文**生成一段确定性档案，
+写进 `Source.note["summary"]`：文件名的第一/中间/最后一条摘录（各 ≤400 字，总量 ≤2000 字）。
+不调模型、不联网，重建可复现。实测 4 个文件的档案（数据库里可查）：
+
+```
+文件：某班级社会实践完成情况表.xlsx
+内容摘录：班级简称 学号 姓名 社会实践已修学时 社会实践待修学时 最近一次社会实践完成年份及所得学时 …
+文件：公务员招考简章.xls
+内容摘录：部门代码 部门名称 用人司局 机构性质 招考职位 职位属性 职位分布 职位简介 …
+文件：某学院入党积极分子积分细则2025修订.pdf
+内容摘录：某学院入党积极分子积分细则（2025年修订）…
+```
+
+**已有文件不需要重建**：命中检索时若发现某文件没有档案，会**当场用它的块补一份并写回**
+（`_describe_files`），所以升级后第一次提问就自动补齐，第二次起直接读库。
+
+**路由**：问答时把问题向量和档案向量比一次余弦，只留 **得分 ≥ 最高分 × 0.80** 的文件
+（`KH_FILE_ROUTING_MIN_RATIO`），并至少保留 2 个（`KH_FILE_ROUTING_TOP_M` 上限 3），
+低于绝对下限 0.30 则不路由（退回全量检索）。档案向量按"文件 id + 档案哈希"缓存，一个进程内每文件只 embed 一次。
+
+**实测**（4 个文件，同一批问题）
+
+| 问题 | 档案最相似的文件（分数） | 路由结果 | 关掉路由 | 打开路由 |
+|---|---|---|---|---|
+| 李明辉的社会实践完成的怎么样 | 社会实践完成情况表.xlsx（0.577） | 4 → 2 | 1655 ms | 1255 ms |
+| 周大鹏的学时是多少 | 社会实践完成情况表.xlsx（0.486） | 4 → 3 | 1568 ms | 658 ms |
+| 奖学金怎么申请 | 励志奖学金通知.docx（0.690） | 4 → 2 | 1515 ms | 1352 ms |
+| 公务员考试报名条件 | 公务员招考简章.xls（0.674） | 4 → 2 | 1711 ms | 1279 ms |
+
+四个问题的**首选文件全部正确**；答案判定（是否拒答）与路由前一致，没有因为缩小范围而漏答。
+延迟中位数约 **1568 → 1279 ms（−18%）**，文件越多收益越大（只检索 2–3 个而不是全部）。
+
+**开关**：`KH_FILE_ROUTING`（默认开）、`TOP_M`、`MIN_RATIO`、`MIN_SIMILARITY`。
+路由是纯优化：档案缺失、向量算不出来、分数不达标任一情况都退回"检索全部"，不会让问题变得答不出来。
+
+### 5.15 中文全文索引：关键词通道一直没生效（"又出现没发现的情况"）
+
+**现象**：路由与闸门都改好之后，问「李明辉的社会实践完成得怎么样」仍然被拒答（0.38 < 0.45），
+信息面板里只有那份表格的**其他几行**，李明辉那一行不在上下文里。
+
+**根因**：`LanceDBDocumentStore` 建全文索引时用的是 `tokenizer_name="en_stem"`——**按空格切词**。
+中文没有空格，整句就是一个 token，于是：
+
+- 关键词通道对任何中文问题都返回 0 条（日志里的 `Got 0 from docstore` 一直没人注意）；
+- 混合检索退化成"只有向量"，而密表格行与自然语言问题的向量距离天然偏远（0.33 左右），
+  永远挤不进候选；
+- 名字、学号这类**精确匹配**本该由关键词通道兜住，实际全是空的。
+
+**实现**
+
+1. 索引改用 n-gram 分词（`base_tokenizer="ngram"`，2–3 字为一词），中文句子被切成「王务/务强/强的…」，
+   问句与表格行都能匹配上；
+2. 老库自动升级：`ensure_fts_index()` 首次查询时重建一次（`docstore/.fts_tokenizer` 记录分词器签名），
+   10267 块重建只用 **3 秒**，不需要重建索引；
+3. **关键词名额上限**：关键词命中没有相似度（分数 `-1`），一旦占满上下文，拒答闸门就"无从判断"而全部放行。
+   现在 `keyword_slots = top_k // 2`，最多占一半；
+4. **关键词只取必要条数**：`docstore_top_k = max(20, slots×4)`。原来取 300 条、每条都要被重排器分词，
+   单次检索 3.2 秒；降到 20 条后回到 1.6 秒。
+
+**实测**（5 个文件 / 10267 块）
+
+| 检查 | 修复前 | 修复后 |
+|---|---|---|
+| `doc_store.query("李明辉")` | 0 条 | **2 条**（社会实践表、综测表） |
+| `doc_store.query("李明辉的社会实践完成得怎么样")` | 0 条 | **3 条**（含正确的那张表） |
+| 该问题的上下文 | 只有其他行 | 含李明辉整行（已修 32 / 待修 0 / 2025 上 16 下 8） |
+| 端到端回答 | 拒答 0.38 | **按行回答**：「已修学时 32、待修 0…」，数字与表一致 |
+| "陈志强"（表里没有） | 拒答 | 仍拒答（中文提示），没有因为关键词变强而乱答 |
+| 无答案集回归 | 91.7% | **91.7%** |
+| 单问题检索耗时 | — | 3.2 s → **1.6 s**（取条数收敛后） |
+
+**测试**：`libs/kotaemon/tests/test_docstore_cjk_fts.py` 5 例（中文问句命中、精确姓名命中、
+分词器签名记录、老索引自动重建、空库不崩）、`ktem_tests/test_retrieval_diversity.py` 增加关键词名额 2 例。
+
+### 5.16 "没有匹配到文件"的最后一层：选择器传了空文件列表
+
+**现象**：问「李明辉的综测情况」，回答是「知识库中没有回答这个问题所需的依据（**最佳匹配得分 0.00**）」，
+而那份综测表就在文件列表里、块和向量都齐全。
+
+**取证**：审计日志 `ktem_app_data/abstained_queries.jsonl` 记录 `best_score: 0.0`；运行日志里两行关键输出：
+
+```
+searching in doc_ids []          <-- 后端收到的文件选择是空的
+Got 0 retrieved documents
+```
+
+0.00 不是"相似度很低"，而是**根本没检索**：`doc_ids` 为空，检索器直接返回 `[]`，
+闸门于是用"没有依据"来回答一个它压根没查的问题。
+
+**根因**：`get_selected_ids()` 在「在文件中搜索」模式下**原样返回下拉框的值**。上传文件会刷新文件列表
+（重写 dropdown 的 choices），这一刷新会把它的 value 清空；下一次提问就带着 `[]` 进来。
+空选择被当成"搜 0 个文件"，而不是"没选就搜全部"。
+
+**实现**（`ktem/utils/selector.py` + `index/file/ui.py`）：
+
+- 新增纯函数 `resolve_selection(mode, selected, all_file_ids)`：`all` 模式返回全部；
+  `select` 模式下**空选择回退到全部**（这是刷新前用户本来的意图）；只有 `disabled` 才真的返回空；
+- `get_selected_ids()` 改为先查全部文件、再交给它裁决，空选择时打印
+  `file selector: search-in-file with an empty selection -> all files`——不再是无声失败。
+
+**实测**（真实索引 5 个文件）
+
+| 选择器状态 | 修复前 | 修复后 |
+|---|---|---|
+| `select` + 下拉框为空 | **0 个文件** → 拒答 0.00 | **5 个文件**（回退全部） |
+| `select` + 下拉框为 None | 0 个文件 | 5 个文件 |
+| `all` | 5 个文件 | 5 个文件 |
+| `select` + 明确选中 1 个 | 1 个文件 | 1 个文件 |
+| 「李明辉的综测情况」（应用路径） | 拒答 0.00 | **按行作答**：综测 57.83 / 65.06 / 平均 61.445 |
+
+**测试**：`ktem_tests/test_file_selector.py` 由 10 例扩到 **15 例**（全量、精确选择、空列表/None/
+空字符串回退、单字符串、disabled 模式）。
+
+### 5.17 文件档案在哪里看（§5.14 的可视化）
+
+档案原本只存在数据库里（`index__<id>__source.note["summary"]`），要查看只能开 SQLite。现在有两个入口：
+
+1. **「文件集合」页的表格新增 `profile` 列**（中文界面显示为「文件档案」）：一行摘录，
+   下拉框/滚动即可看到每个文件被理解成什么内容；
+2. **命令行 `python tools/file_profiles.py`**：逐个文件打印「块数 / 向量 / loader / tokens / 档案」，
+   `--name 关键词` 过滤、`--json out.json` 出机器可读结果、`--full` 不截断；
+   只读打开 `sqlite.db`，不会改动数据。档案还没生成的文件会显示「尚未生成，首次检索会自动补齐」。
+
+实测输出（6 个文件，节选）：
+
+```
+■ 某班级学年综测汇总表.xlsx
+  块数 8 / 向量 8 / loader PandasExcelReader / tokens 2340
+  档案：学年：2025-2026学年 班级：某班级 汇总人：赵一鸣 … 学号 姓名 第一学期学业成绩测评 …
+■ 校赛成绩发布.pdf
+  块数 6 / 向量 6 / loader OCRPDFReader / tokens 1776
+  档案：2026年学科竞赛校赛成绩 序号 队名 成员1（队长） 成员2 成员3 奖项 …
+■ 公务员招考简章.xls
+  块数 10237 / 向量 10237 / loader PandasExcelReader / tokens 6983734
+  档案：部门代码 部门名称 用人司局 机构性质 招考职位 职位属性 职位分布 …
+```
+
+**实现**：`ktem/utils/file_profile.py`（纯函数：去重文件名前缀、压成单行、截断）+ 文件列表多一列；
+`tools/file_profiles.py` 只读 sqlite 并渲染。测试：`ktem_tests/test_file_profile.py` 5 例、
+`tools/tests/test_file_profiles.py` 6 例（含用临时 sqlite 造数据的整链验证、缺库退出码 2）。
+`profile` 列头已加入中文词表（「文件档案」）。
+
+### 5.18 表格信息被挤在一起的修复（列宽单位 + 页面宽度）
+
+**现象**：文件集合页的表格每列都挤在一起，`profile` 列被裁、`date_created` 看不到；改成换行后
+又变成**一行高得像整张表**、页面两侧还空着大片留白。
+
+**两个根因**
+
+1. **列宽单位**：Gradio 的 `gr.DataFrame(column_widths=[...])` 把**裸数字当像素**。原来的
+   `[0, 50, 8, 7, 15, 20]` 渲染成 `0px / 50px / 8px …`，名字列只有 50px，长文本必然被裁
+   （从运行实例的 `/config` 里读到的就是 `['0px', '22px', …]`）。
+2. **页面宽度上限**：`main.css` 里 `#resources-tab { max-width: max(70vw, 1200px) }`，
+   在 1535px 屏幕上只有 ~1074px，两侧各留 ~230px 空白——表格却在这个窄框里挤。
+
+**实现**
+
+1. 列宽全部改成百分比：文件表 `["0%","24%","7%","7%","12%","34%","16%"]`，
+   分组表 `["0%","25%","55%","20%"]`；顺带把索引列表、模型/向量模型/重排/MCP/论文推荐/用户列表
+   的裸数字列宽一并换掉（同一个坑不留一半）；
+2. **`wrap=False`**：一行一个文件，行高正常；`profile` 列只放 40 字摘录，
+   **完整档案在选中文件后显示在下方详情区**（标题里加「文件档案：…」）；
+3. **放开页面宽度**：`#resources-tab` 的 `max-width` 改为 `max(92vw, 1400px)`，
+   1535px 屏幕可用宽度从 ~1074px 提到 ~1412px（+31%）；表格高度固定 420px，多余文件滚动。
+
+**验证**（从 7861 验证实例的 `/config` 与首页 HTML 读取，不是看代码）：
+
+```
+headers = ['id','名称','大小','tokens','加载器','文件档案','date_created']
+wrap = False        widths = ['0%','24%','7%','7%','12%','34%','16%']   height = 420
+首页 CSS 含 max-width: max(92vw, 1400px)
+```
+
+验证实例用完即关（7861 已释放），用户自己的 7860 未受影响。
+
+**第二轮（按"要横向、不要纵向"+ 悬浮看全文）**
+
+- 第一列不再是隐藏的 `id`：列顺序改为 `名称 / 大小 / tokens / 加载器 / 文件档案 / 创建时间 / id`，
+  `id` 留在最后且宽度 0%（行选择仍按列名取它，不受影响）；
+- 单元格改为**单行 + 省略号**（`#file_list_view td { overflow:hidden; text-overflow:ellipsis;
+  white-space:nowrap }`），不会再"溢出盖住下一列"；
+- **鼠标悬浮显示全文**：`assets/js/main.js` 里加 `decorateClampedCells()`，只在
+  `cell.scrollWidth > cell.clientWidth`（确实被裁）时给该格设 `title`，浏览器原生 tooltip 显示完整内容；
+  Gradio 每次刷新表格会重建 DOM，所以用 `MutationObserver` 持续补挂；
+- 表格高度 420px、`wrap=False`，一行一个文件，不再纵向拉长。
+- 第三轮（用户反馈"id 不显示 / 不要省噪号"）：列顺序恢复为 **id 在最前**，列宽改成**按内容大致定尺的像素**
+  `["250px","430px","80px","90px","150px","640px","170px"]`（合计 ~1810px，表格比容器宽时**横向滚动**），
+  并去掉 `text-overflow: ellipsis`——单元格不再被画上省略号；只有真正超宽的值才会被裁，
+  此时鼠标悬浮仍然给全文提示。`profile` 列取前 45 字且**不加省略号**（完整档案在下方详情区）。
+  验证（重启后的实例）：`headers=['id','名称','大小','tokens','加载器','文件档案','date_created']`、
+  `widths=['250px','430px','80px','90px','150px','640px','170px']`、页面不再含 `text-overflow: ellipsis`、
+  含悬停逻辑与 `92vw`。
+- 第四轮（用户要求去掉 id 列）：文件表不再有 `id` 列——`FILE_LIST_COLUMNS` 决定显示列，
+  **行选择改为读“状态记录”**（`file_list_state`）而不是渲染出来的表格：
+  `interact_file_list(records, ev)` 按行号从同一个来源取 `id`/`name`，
+  `.select(inputs=[self.file_list_state])`。这样列可以自由删减而选择不受影响。
+  实测（重启后实例）：`headers=['名称','大小','tokens','加载器','文件档案','date_created']`、
+  `widths=['430px','80px','90px','150px','640px','170px']`、不含 `id`、不含 `text-overflow: ellipsis`、
+  悬停逻辑仍在。新增 `ktem_tests/test_file_list_selection.py`（4 例：正常点选、取消选择、空列表、越界行）。
+- 第五轮（两条横向滚动条）：表格里有两条同类滚动条——Gradio 的 `.table-wrap` 自己就能横向滚动，
+  而组件外层（`height` 固定时）又加了一个。保留表格内那条，外层设为 `overflow-x: hidden`
+  （竖向仍可滚动），并用 `#file_list_view.table-wrap` 这条更高优先级的规则兜底，
+  保证无论 `elem_id` 落在外层还是滚动容器上都成立。
+- 第六轮（仍有两条滚动条 → 从根源消除横向溢出）：上一轮只隐藏了外层滚动，但**表格本身仍比面板宽**。
+  窗口 ~1088px 时内容区 ~1000px，而 px 列宽合计 1560px——横向溢出必然发生，于是表格自己的滚动条 +
+  被撑宽的祖先 flex 容器又各给出一条。改为**按百分比分配列宽**
+  `("28%","7%","7%","15%","29%","14%")`（合计 100%），表格宽度恒等于容器，横向溢出从源头消失；
+  另加 `#file_list_view { min-width: 0; max-width: 100% }`，防止 flex 祖先再按内容撑宽。
+  代价：超长列会被裁（**不画省略号**），全文靠悬停提示 + 下方详情区。
+  验证：`widths=['28%','7%','7%','15%','29%','14%']`、合计 100、页面无 `text-overflow: ellipsis`、
+  含 `min-width: 0`。
+  （说明：这个沙箱里 playwright 无法拉起浏览器，本轮只能验证配置与 CSS 已生效，视觉效果由用户确认。）
+
+### 5.19 "还是不能精确召回"：三个叠加的缺陷（2026-10-18）
+
+**现象**：问「李明辉进省赛了吗」，界面回「知识库中没有回答这个问题所需的依据（最佳匹配得分
+**0.41**，低于阈值 0.45）」。但信息面板里第一块正文明明白白写着
+`10 星河队 赵一鸣 钱二毛 李明辉 二等奖+推荐省赛` —— 召回是对的，是**判定**错了。
+审计日志（`ktem_app_data/abstained_queries.jsonl`）同时留下了这一条：
+`{"question":"李明辉进省赛了吗","best_score":0.412,"threshold":0.45,"reason":"low_score"}`。
+
+用离线评测把这一题复现出来（真实 6 文件语料、不调用对话模型）：
+
+```
+python -X utf8 tools/eval_retrieval.py --eval <上面那题> --json out.json
+→ top_score 0.412，名次 1（正确块就在第一名），term_evidence false，abstained true
+```
+
+顺着这条线查出**三个各自独立、又会互相掩盖**的原因：
+
+**① 闸门的"实体证据"只认横排表格，不认竖排表格**
+
+§5.8 的放宽要求"实体词逐字出现在**表格式行**里"（≥3 字段且 ≥60% 字段含数字）。xlsx 的行是
+`24405010001 李明辉 8 24 …`，满足；而这份 PDF 的读取器**一格一行**：
+`10` / `星河队` / `赵一鸣` / `钱二毛` / `李明辉` / `二等奖+推荐省赛`，单字段永远凑不出"字段"，
+于是 0.412 ≥ 下限 0.33 也照样拒答。
+
+**实现**（`kotaemon/abstain.py`）：新增 `line_is_a_cell(line, term)`——整行（去掉空白与
+`:：,，、;；|` 之类的格内标点）**恰好等于**该实体词，即"这一行就是一个单元格"。判定改成
+"表格式行 **或** 独占一行的单元格"。门槛仍然很高：散文句子永远不可能是一整行三个字。
+
+**② 中文关键词通道在"小选集"下静默返回 0 条**
+
+§5.15 修好了分词器（`ngram-2-3`），但 `docstore.query` 把范围过滤器写成
+`where(id in (...), prefilter=True)`。Lance 这一版走的是**原生 FTS**（不是 tantivy 分支），
+过滤器被下推到**命中之前**，小选集直接 0 条。实测（同一份库）：
+
+| 同一个查询「李明辉」 | `prefilter=True`（原） | `prefilter=False`（现） |
+|---|---|---|
+| 不传过滤器 | 3 条 | 3 条 |
+| 只限定 学科竞赛 那 6 个块（答案就在里面） | **0 条** | **1 条** |
+| 限定全库 10273 个块 | 4 条 | 4 条 |
+
+也就是说：**选集越小，关键词通道越哑**——而"在文件中搜索"恰好总是小选集。端到端可见
+`searching in doc_ids [...] Got 0 from docstore`：「星河队队的成员都有谁」（范围 17 块）
+从 **0 条** 变成 **3 条**。
+
+**实现**（`kotaemon/storages/docstores/lancedb.py`）：`query()` 改用 `prefilter=False`。
+实测过滤器仍在**取前 N 条之前**生效（范围 7 块、全局命中 1000+ 行时仍返回该范围的全部 7 块），
+不需要额外放大 `top_k`。
+
+**③ 关键词命中排在最前，一旦通道恢复就把真正的匹配挤掉**
+
+`VectorRetrieval.run` 原来把关键词命中**前置**（`[关键词…] + [向量…]`）。通道是 0 条时这条
+无害；②一修就变成灾难：本地重排器按"问题词覆盖率"排序，关键词命中覆盖率天然高（它逐字命中），
+于是被排到最前面，`diversify_by_source` 又把它当成"该文件最好的块"，真正高分块被挤出上下文。
+
+| 27 题（积分细则集，真实 6 文件语料） | 关键事实覆盖 | 可答题误拒 |
+|---|---|---|
+| ②修好、命中仍前置 | **63.0%** | **59.3%**（16/27） |
+| ②修好、命中改后置（现在） | 96.3% | 3.7% |
+| ②未修（原状，命中近乎为 0） | 96.3% | 3.7% |
+
+单题例子：「发明专利、软件著作权、实用新型专利怎么加分？」最高分从 **0.535** 掉到 **0.448**
+（正确答案那一块被挤掉了）。
+
+**实现**（`kotaemon/indices/vectorindex.py`）：新增 `similarity_documents_first()`，在重排之后、
+截断之前把 `score < 0` 的命中排到后面——**关键词命中只补相似度排序剩下的名额，不再压过分真匹配**。
+
+**实测（三处改动一起）**
+
+| 集合 / 指标 | 改前 | 改后 |
+|---|---|---|
+| 现场三题可答题误拒（0.412 / 0.476 / 0.367） | 66.7% | **0%** |
+| 「李明辉进省赛了吗」 | 0.412 拒答 | **0.412 作答** |
+| 「星河队队的成员都有谁」 | 0.367 拒答 | **0.367 作答** |
+| 无答案集 12 题：正确拒答率 | 91.7% | **91.7%**（未放松） |
+| 积分细则 27 题：关键事实覆盖 | 96.3% | **96.3%** |
+| 积分细则 27 题：可答题误拒 | 3.7% | **3.7%**（两次运行 3.7% / 0%，见下） |
+
+**测试**：`ktem_tests/test_abstain_gate.py` 20 → 27 例（竖排单元格算证据、散文仍不算、
+低于 0.33 仍拒、竖排表里没有该名字不算）；`kotaemon/tests/test_docstore_cjk_fts.py` 5 → 6 例
+（**限定选集**的查询必须命中——原来的用例全是不带过滤器的全库查询，所以漏了这个 bug）；
+`ktem_tests/test_retrieval_diversity.py` 13 → 16 例（关键词命中必须排在所有相似度命中之后、
+无命中时顺序不变、坏分数不崩）。
+
+**局限（两个都还没修）**
+
+1. 闸门仍只看分数 + 实体词，判断不了"实体在、属性不在"：问「李明辉的体重是多少」「学科竞赛
+   的省赛第一名是谁」，检索能命中同一块，闸门就放行，模型于是硬答。要解决得做答案级校验。
+2. **同一个问题两次评测会拿到不同候选集**：q27 一次含第 3 页块（0.535，作答），另一次只含第 1 页
+   块（0.448，拒答）。同一进程内重复查询结果一致（chroma 连查 5 次、FTS 连查 5 次都一样），
+   跨进程才翻转；路由与各通道命中数两次完全相同（`6 -> 3 files`、`300 from vectorstore`、
+   `20 from docstore`），根因尚未定位。这也是"有时候答得出、有时候答不出"的另一半来源。
+
+**怎么复现**
+
+```powershell
+# 需要应用停止（共用 sqlite / LanceDB）；本题单题集合见上文的 <上面那题>
+.\.venv\Scripts\python.exe -X utf8 tools\eval_retrieval.py --eval tools\eval\zh-no-answer.json
+.\.venv\Scripts\python.exe -X utf8 tools\eval_retrieval.py --eval tools\eval\zh-points-rules.json
+```
+
+> 注意：`python -X utf8` 不能省。不加时 gradio 在导入阶段用系统 GBK 读源码，
+> 直接 `UnicodeDecodeError`（与 `start.bat` 里的启动方式一致）。
+
+### 5.20 文件都在库里，为什么没被检索：路由只认"讲什么"，不认"有谁"（2026-10-18）
+
+**现象**：问「李明辉的综测可以评国家励志奖学金吗」，回答「材料中没有李明辉的综合测评排名数据」。
+信息面板里只有《国家励志奖学金通知》和 学科竞赛 校赛成绩——**综测汇总表明明在「文件集合」里、
+块和向量都齐全**。运行日志给出了现场：
+
+```
+searching in doc_ids [6 个]
+file routing: 6 -> 2 files          <-- 检索前就只剩 2 个文件
+retrieval_kwargs: ...
+Got 15 from vectorstore / Got 0 from docstore
+```
+
+**定位（不是闸门，也不是向量模型）**：把这道题的路由输入打出来（各文件档案 vs 问题的余弦）：
+
+| 文件 | 档案相似度 | 是否被路由 |
+|---|---|---|
+| 某学院2025-2026学年国家励志奖学金通知.docx | **0.6267** | ✅ |
+| 校赛成绩发布.pdf | 0.4864 | ✅（凑够"至少 2 个"） |
+| 某学院入党积极分子积分细则2025修订.pdf | 0.4770 | ❌ |
+| 中央机关…公务员招考简章.xls | 0.4651 | ❌ |
+| **某班级学年综测汇总表.xlsx** | **0.4365** | ❌ |
+| 某班级社会实践完成情况表.xlsx | 0.4318 | ❌ |
+
+路由规则是"档案相似度 ≥ 最高分 × 0.80"（§5.14），门槛 = 0.6267 × 0.8 = **0.5014** → 只有通知达标，
+再补一个 学科竞赛 凑够两个。综测表排第 5，**在查询发生之前就被排除出检索范围**，所以后面
+"按文件补齐""关键词通道"都救不了它——它们只在被选中的文件里工作。
+
+根因：**文件档案描述的是"这个文件讲什么"，回答不了"里面有没有这个人"**。成绩表在向量空间里
+就是一堵数字（`24405010001 李明辉 75.45 84.27 …`），永远比"奖学金通知"离问题远。
+
+**实现**（`abstain.text_names_entity` + `routing.entity_evidence_files` / `add_entity_files`
++ `DocumentRetrievalPipeline._entity_files` / `_is_small_file`）：
+
+1. 路由后再做一次**全库全文查询**（不嵌向量，毫秒级）：这个问题里的实体词出现在哪些块里；
+2. 只认"实体词落在**表格行**或**短单元格**里"的命中（`text_names_entity`：行是表格式行，或行是
+   ≤20 字且不含句读的独立单元格；名字被切成 3 字窗口，所以 `王务` 命中单元格 `李明辉`）——
+   散文里的同名词不算，否则"图书馆"这种主题词也会把文件拉进来（§5.8 的老坑）；
+3. **补齐上限**：最多补 2 个文件（`KH_ROUTING_ENTITY_FILES`），且只补 **≤500 块**的文件
+   （`KH_ROUTING_ENTITY_MAX_CHUNKS`）——1 万块的公务员简章进检索范围会把候选列表挤爆（§5.13 老坑）；
+   全文候选取 30 条（`KH_ROUTING_ENTITY_CANDIDATES`）；`KH_ROUTING_ENTITY_FILES=0` 可整条关掉；
+4. 与档案路由结果取并集（`add_entity_files`，去重、保序），日志会打印
+   `file routing: +2 file(s) whose table names the entity (2 -> 4)`。
+
+**实测**
+
+| 口径 | 改前 | 改后 |
+|---|---|---|
+| 该题路由 | 6 → **2** 个文件 | 6 → **4** 个（补社会实践表、综测表） |
+| 该题上下文 | 只有通知 + 学科竞赛 | 含 `24405010001 李明辉 75.45 84.27 79.86 4 …` 的综测行 |
+| 27 题关键事实覆盖 | 96.3% | **96.3%** |
+| 27 题可答题误拒 | 3.7% | **3.7%** |
+| 27 题检索 P50 / P95 | 434 / — ms | **405 / 975 ms**（多一次全文查询，无嵌入调用） |
+| 无答案集 12 题正确拒答 | 91.7% | **91.7%** |
+
+**中间两版被自己的实测否掉了（留档，免得再踩）**
+
+| 版本 | 问题 | 27 题事实覆盖 |
+|---|---|---|
+| 只按"3 字 CJK 窗口"判实体 | `一、二、三等奖`/`加5分` 产生单字词 `分`、`二`，把公务员简章、积分细则都拉进来 | 88.9% |
+| 加"≥3 字"下限、不加上限 | 公务员简章（10237 块）进了范围，q03「理论考试90分以上加几分」的上下文 10 个名额被它占 9 个 | 92.6% |
+| 再加"≤500 块"体积上限 | 回到基线 | **96.3%** |
+
+**测试**：`ktem_tests/test_file_routing.py` 13 → **21** 例（表格行/单元格/散文/长描述行/单字词不算、
+按证据次数排序、不越出用户选择、并集去重与上限）。全部 65 例通过（routing + abstain + diversity）。
+
+**局限**：实体证据是"字面出现在表格里"，不是语义判断；体积上限意味着**大表里的某一行仍然搜不到**
+（1 万块的招考简章这种）；"实体在、属性不在"（问体重、问不存在的名次）仍是 §5.19 局限 1。
+
+
+
+
+
+
+

@@ -1,21 +1,48 @@
 {
   "summary": {
     "questions": 27,
-    "corpus_chunks": 4,
-    "hit_at_1": 0.5925925925925926,
-    "hit_at_3": 0.7407407407407407,
-    "hit_at_5": 0.8148148148148148,
-    "mrr": 0.7021604938271605,
+    "corpus_chunks": 7,
+    "hit_at_1": 0.7777777777777778,
+    "hit_at_3": 0.8888888888888888,
+    "hit_at_5": 0.8888888888888888,
+    "mrr": 0.8473691945914168,
     "facts": 0.8148148148148148,
+    "latency_p50_ms": 1312.9,
+    "latency_p95_ms": 1827.7,
     "k": 5
+  },
+  "categories": {
+    "未分类": {
+      "questions": 27,
+      "corpus_chunks": 7,
+      "hit_at_1": 0.7777777777777778,
+      "hit_at_3": 0.8888888888888888,
+      "hit_at_5": 0.8888888888888888,
+      "mrr": 0.8473691945914168,
+      "facts": 0.8148148148148148,
+      "latency_p50_ms": 1312.9,
+      "latency_p95_ms": 1827.7,
+      "k": 5
+    }
+  },
+  "abstain": {
+    "threshold": 0.45,
+    "abstain_questions": 0,
+    "abstain_rate": null,
+    "false_reject_rate": 0.037037037037037035
   },
   "results": [
     {
       "id": "q01",
+      "category": "未分类",
       "question": "这份细则的满分是多少分？由哪几个部分组成？",
       "expect_pages": [
         "1"
       ],
+      "abstain_case": false,
+      "top_score": 0.553,
+      "abstained": false,
+      "elapsed_ms": 1495.6,
       "rank": 0,
       "mrr": 1.0,
       "terms_ok": true,
@@ -23,44 +50,115 @@
       "retrieved": [
         {
           "page": "1",
-          "score": 0.555
-        },
-        {
-          "page": "4",
-          "score": 0.486
+          "score": 0.553
         },
         {
           "page": "3",
-          "score": 0.483
+          "score": 0.52
+        },
+        {
+          "page": "3",
+          "score": 0.5
+        },
+        {
+          "page": "4",
+          "score": 0.481
         },
         {
           "page": "2",
-          "score": 0.476
+          "score": 0.468
         },
         {
-          "page": 1,
-          "score": 0.42
+          "page": "2",
+          "score": 0.467
         },
         {
-          "page": 1,
-          "score": 0.41
+          "page": "3",
+          "score": 0.458
         },
         {
-          "page": 1,
-          "score": 0.404
+          "page": "4",
+          "score": 0.456
         },
         {
-          "page": 1,
-          "score": 0.384
+          "page": "2",
+          "score": 0.446
+        },
+        {
+          "page": "1",
+          "score": 0.441
         }
       ]
     },
     {
       "id": "q02",
+      "category": "未分类",
       "question": "学习强国满1000分加几分？不满500分怎么处理？",
       "expect_pages": [
         "1"
       ],
+      "abstain_case": false,
+      "top_score": 0.516,
+      "abstained": false,
+      "elapsed_ms": 1295.8,
+      "rank": 0,
+      "mrr": 1.0,
+      "terms_ok": true,
+      "missing_terms": [],
+      "retrieved": [
+        {
+          "page": "1",
+          "score": 0.516
+        },
+        {
+          "page": "2",
+          "score": 0.515
+        },
+        {
+          "page": "1",
+          "score": 0.511
+        },
+        {
+          "page": "2",
+          "score": 0.51
+        },
+        {
+          "page": "2",
+          "score": 0.505
+        },
+        {
+          "page": null,
+          "score": 0.385
+        },
+        {
+          "page": null,
+          "score": 0.378
+        },
+        {
+          "page": null,
+          "score": 0.377
+        },
+        {
+          "page": null,
+          "score": 0.375
+        },
+        {
+          "page": null,
+          "score": 0.375
+        }
+      ]
+    },
+    {
+      "id": "q03",
+      "category": "未分类",
+      "question": "理论考试90分以上加几分？缺考怎么处理？",
+      "expect_pages": [
+        "1"
+      ],
+      "abstain_case": false,
+      "top_score": 0.519,
+      "abstained": false,
+      "elapsed_ms": 1606.8,
       "rank": 1,
       "mrr": 0.5,
       "terms_ok": true,
@@ -68,134 +166,57 @@
       "retrieved": [
         {
           "page": "2",
-          "score": 0.525
+          "score": 0.519
         },
         {
           "page": "1",
-          "score": 0.51
-        },
-        {
-          "page": "3",
-          "score": 0.509
-        },
-        {
-          "page": "4",
           "score": 0.497
         },
         {
-          "page": 1,
-          "score": 0.443
-        },
-        {
-          "page": 1,
-          "score": 0.404
-        },
-        {
-          "page": 1,
-          "score": 0.402
-        },
-        {
-          "page": 1,
-          "score": 0.385
-        }
-      ]
-    },
-    {
-      "id": "q03",
-      "question": "理论考试90分以上加几分？缺考怎么处理？",
-      "expect_pages": [
-        "1"
-      ],
-      "rank": 3,
-      "mrr": 0.25,
-      "terms_ok": true,
-      "missing_terms": [],
-      "retrieved": [
-        {
-          "page": "2",
-          "score": 0.529
-        },
-        {
           "page": "4",
-          "score": 0.511
-        },
-        {
-          "page": "3",
-          "score": 0.493
+          "score": 0.492
         },
         {
           "page": "1",
-          "score": 0.486
+          "score": 0.465
         },
         {
-          "page": 1,
-          "score": 0.383
+          "page": null,
+          "score": 0.397
         },
         {
-          "page": 1,
-          "score": 0.357
+          "page": null,
+          "score": 0.397
         },
         {
-          "page": 1,
-          "score": 0.357
+          "page": null,
+          "score": 0.391
         },
         {
-          "page": 1,
-          "score": 0.351
+          "page": null,
+          "score": 0.388
+        },
+        {
+          "page": null,
+          "score": 0.386
+        },
+        {
+          "page": null,
+          "score": 0.386
         }
       ]
     },
     {
       "id": "q04",
+      "category": "未分类",
       "question": "参加学院组织的思想政治教育类讲座，每学期每次加几分？",
       "expect_pages": [
         "1"
       ],
-      "rank": 3,
-      "mrr": 0.25,
-      "terms_ok": true,
-      "missing_terms": [],
-      "retrieved": [
-        {
-          "page": "4",
-          "score": 0.576
-        },
-        {
-          "page": "2",
-          "score": 0.562
-        },
-        {
-          "page": "3",
-          "score": 0.562
-        },
-        {
-          "page": "1",
-          "score": 0.547
-        },
-        {
-          "page": 1,
-          "score": 0.423
-        },
-        {
-          "page": 1,
-          "score": 0.381
-        },
-        {
-          "page": 1,
-          "score": 0.372
-        },
-        {
-          "page": 1,
-          "score": 0.361
-        }
-      ]
-    },
-    {
-      "id": "q05",
-      "question": "在图书馆借阅思想政治类书籍加分有什么要求？",
-      "expect_pages": [
-        "1"
-      ],
+      "abstain_case": false,
+      "top_score": 0.594,
+      "abstained": false,
+      "elapsed_ms": 1330.2,
       "rank": 0,
       "mrr": 1.0,
       "terms_ok": true,
@@ -203,44 +224,345 @@
       "retrieved": [
         {
           "page": "1",
-          "score": 0.533
+          "score": 0.594
         },
         {
-          "page": "4",
-          "score": 0.515
+          "page": "1",
+          "score": 0.589
         },
         {
           "page": "2",
-          "score": 0.506
+          "score": 0.584
         },
         {
           "page": "3",
-          "score": 0.469
+          "score": 0.557
         },
         {
-          "page": 1,
-          "score": 0.438
+          "page": "4",
+          "score": 0.544
         },
         {
-          "page": 1,
-          "score": 0.41
+          "page": "4",
+          "score": 0.529
         },
         {
-          "page": 1,
-          "score": 0.405
+          "page": "2",
+          "score": 0.528
         },
         {
-          "page": 1,
-          "score": 0.39
+          "page": "3",
+          "score": 0.514
+        },
+        {
+          "page": "2",
+          "score": 0.505
+        },
+        {
+          "page": "1",
+          "score": 0.5
+        }
+      ]
+    },
+    {
+      "id": "q05",
+      "category": "未分类",
+      "question": "在图书馆借阅思想政治类书籍加分有什么要求？",
+      "expect_pages": [
+        "1"
+      ],
+      "abstain_case": false,
+      "top_score": 0.605,
+      "abstained": false,
+      "elapsed_ms": 1729.6,
+      "rank": 0,
+      "mrr": 1.0,
+      "terms_ok": true,
+      "missing_terms": [],
+      "retrieved": [
+        {
+          "page": "1",
+          "score": 0.605
+        },
+        {
+          "page": "1",
+          "score": 0.533
+        },
+        {
+          "page": "1",
+          "score": 0.489
+        },
+        {
+          "page": null,
+          "score": 0.466
+        },
+        {
+          "page": null,
+          "score": 0.452
+        },
+        {
+          "page": null,
+          "score": 0.448
+        },
+        {
+          "page": null,
+          "score": 0.437
+        },
+        {
+          "page": null,
+          "score": 0.423
+        },
+        {
+          "page": null,
+          "score": 0.401
+        },
+        {
+          "page": null,
+          "score": 0.393
         }
       ]
     },
     {
       "id": "q06",
+      "category": "未分类",
       "question": "专业总成绩绩点在4以上加几分？",
       "expect_pages": [
         "2"
       ],
+      "abstain_case": false,
+      "top_score": 0.66,
+      "abstained": false,
+      "elapsed_ms": 1497.6,
+      "rank": 0,
+      "mrr": 1.0,
+      "terms_ok": true,
+      "missing_terms": [],
+      "retrieved": [
+        {
+          "page": "2",
+          "score": 0.66
+        },
+        {
+          "page": null,
+          "score": 0.449
+        },
+        {
+          "page": null,
+          "score": 0.445
+        },
+        {
+          "page": null,
+          "score": 0.426
+        },
+        {
+          "page": null,
+          "score": 0.422
+        },
+        {
+          "page": null,
+          "score": 0.422
+        },
+        {
+          "page": null,
+          "score": 0.42
+        },
+        {
+          "page": null,
+          "score": 0.419
+        },
+        {
+          "page": null,
+          "score": 0.418
+        },
+        {
+          "page": null,
+          "score": 0.4
+        }
+      ]
+    },
+    {
+      "id": "q07",
+      "category": "未分类",
+      "question": "英语四级、六级通过分别加几分？",
+      "expect_pages": [
+        "2"
+      ],
+      "abstain_case": false,
+      "top_score": 0.433,
+      "abstained": true,
+      "elapsed_ms": 1846.2,
+      "rank": 8,
+      "mrr": 0.1111111111111111,
+      "terms_ok": false,
+      "missing_terms": [
+        "英语四级、六级通过分别加4分和6分"
+      ],
+      "retrieved": [
+        {
+          "page": null,
+          "score": 0.433
+        },
+        {
+          "page": null,
+          "score": 0.414
+        },
+        {
+          "page": null,
+          "score": 0.408
+        },
+        {
+          "page": null,
+          "score": 0.399
+        },
+        {
+          "page": null,
+          "score": 0.392
+        },
+        {
+          "page": null,
+          "score": 0.381
+        },
+        {
+          "page": null,
+          "score": 0.378
+        },
+        {
+          "page": null,
+          "score": 0.377
+        },
+        {
+          "page": "2",
+          "score": -1.0
+        }
+      ]
+    },
+    {
+      "id": "q08",
+      "category": "未分类",
+      "question": "计算机二级通过可以加几分？",
+      "expect_pages": [
+        "2"
+      ],
+      "abstain_case": false,
+      "top_score": 0.598,
+      "abstained": false,
+      "elapsed_ms": 1899.4,
+      "rank": 0,
+      "mrr": 1.0,
+      "terms_ok": true,
+      "missing_terms": [],
+      "retrieved": [
+        {
+          "page": "2",
+          "score": 0.598
+        },
+        {
+          "page": 1,
+          "score": 0.455
+        },
+        {
+          "page": null,
+          "score": 0.416
+        },
+        {
+          "page": null,
+          "score": 0.41
+        },
+        {
+          "page": null,
+          "score": 0.409
+        },
+        {
+          "page": null,
+          "score": 0.403
+        },
+        {
+          "page": null,
+          "score": 0.402
+        },
+        {
+          "page": null,
+          "score": 0.401
+        },
+        {
+          "page": null,
+          "score": 0.4
+        },
+        {
+          "page": null,
+          "score": 0.399
+        }
+      ]
+    },
+    {
+      "id": "q09",
+      "category": "未分类",
+      "question": "计算机软件资格考试中级通过加几分？",
+      "expect_pages": [
+        "2"
+      ],
+      "abstain_case": false,
+      "top_score": 0.568,
+      "abstained": false,
+      "elapsed_ms": 1686.5,
+      "rank": 0,
+      "mrr": 1.0,
+      "terms_ok": true,
+      "missing_terms": [],
+      "retrieved": [
+        {
+          "page": "2",
+          "score": 0.568
+        },
+        {
+          "page": null,
+          "score": 0.41
+        },
+        {
+          "page": null,
+          "score": 0.409
+        },
+        {
+          "page": null,
+          "score": 0.405
+        },
+        {
+          "page": null,
+          "score": 0.404
+        },
+        {
+          "page": null,
+          "score": 0.404
+        },
+        {
+          "page": null,
+          "score": 0.403
+        },
+        {
+          "page": null,
+          "score": 0.401
+        },
+        {
+          "page": null,
+          "score": 0.4
+        },
+        {
+          "page": null,
+          "score": 0.398
+        }
+      ]
+    },
+    {
+      "id": "q10",
+      "category": "未分类",
+      "question": "其他领域的职业技能资格证书每项加几分，最多加几分？",
+      "expect_pages": [
+        "2"
+      ],
+      "abstain_case": false,
+      "top_score": 0.651,
+      "abstained": false,
+      "elapsed_ms": 1085.5,
       "rank": 0,
       "mrr": 1.0,
       "terms_ok": true,
@@ -251,223 +573,54 @@
           "score": 0.651
         },
         {
-          "page": "3",
-          "score": 0.589
+          "page": null,
+          "score": 0.441
         },
         {
-          "page": "4",
-          "score": 0.573
-        },
-        {
-          "page": "1",
-          "score": 0.497
-        },
-        {
-          "page": 1,
-          "score": 0.411
-        },
-        {
-          "page": 1,
-          "score": 0.409
-        },
-        {
-          "page": 1,
-          "score": 0.393
-        },
-        {
-          "page": 1,
-          "score": 0.385
-        }
-      ]
-    },
-    {
-      "id": "q07",
-      "question": "英语四级、六级通过分别加几分？",
-      "expect_pages": [
-        "2"
-      ],
-      "rank": 7,
-      "mrr": 0.125,
-      "terms_ok": false,
-      "missing_terms": [
-        "英语四级、六级通过分别加4分和6分"
-      ],
-      "retrieved": [
-        {
-          "page": "3",
-          "score": 0.482
-        },
-        {
-          "page": "4",
-          "score": 0.473
-        },
-        {
-          "page": "1",
-          "score": 0.439
-        },
-        {
-          "page": 1,
-          "score": 0.366
-        },
-        {
-          "page": 1,
-          "score": 0.352
-        },
-        {
-          "page": 1,
-          "score": 0.347
-        },
-        {
-          "page": 1,
-          "score": 0.346
-        },
-        {
-          "page": "2",
-          "score": -1.0
-        }
-      ]
-    },
-    {
-      "id": "q08",
-      "question": "计算机二级通过可以加几分？",
-      "expect_pages": [
-        "2"
-      ],
-      "rank": 1,
-      "mrr": 0.5,
-      "terms_ok": true,
-      "missing_terms": [],
-      "retrieved": [
-        {
-          "page": "4",
-          "score": 0.604
-        },
-        {
-          "page": "2",
-          "score": 0.578
-        },
-        {
-          "page": "1",
-          "score": 0.544
-        },
-        {
-          "page": "3",
-          "score": 0.51
-        },
-        {
-          "page": 1,
-          "score": 0.455
-        },
-        {
-          "page": 1,
-          "score": 0.419
-        },
-        {
-          "page": 1,
-          "score": 0.414
-        },
-        {
-          "page": 1,
-          "score": 0.406
-        }
-      ]
-    },
-    {
-      "id": "q09",
-      "question": "计算机软件资格考试中级通过加几分？",
-      "expect_pages": [
-        "2"
-      ],
-      "rank": 0,
-      "mrr": 1.0,
-      "terms_ok": true,
-      "missing_terms": [],
-      "retrieved": [
-        {
-          "page": "2",
-          "score": 0.548
-        },
-        {
-          "page": "4",
-          "score": 0.543
-        },
-        {
-          "page": "1",
-          "score": 0.519
-        },
-        {
-          "page": "3",
-          "score": 0.46
-        },
-        {
-          "page": 1,
+          "page": null,
           "score": 0.436
         },
         {
-          "page": 1,
+          "page": null,
+          "score": 0.434
+        },
+        {
+          "page": null,
+          "score": 0.432
+        },
+        {
+          "page": null,
+          "score": 0.43
+        },
+        {
+          "page": null,
+          "score": 0.426
+        },
+        {
+          "page": null,
           "score": 0.423
         },
         {
-          "page": 1,
-          "score": 0.422
+          "page": null,
+          "score": 0.419
         },
         {
-          "page": 1,
-          "score": 0.421
-        }
-      ]
-    },
-    {
-      "id": "q10",
-      "question": "其他领域的职业技能资格证书每项加几分，最多加几分？",
-      "expect_pages": [
-        "2"
-      ],
-      "rank": 0,
-      "mrr": 1.0,
-      "terms_ok": true,
-      "missing_terms": [],
-      "retrieved": [
-        {
-          "page": "2",
-          "score": 0.622
-        },
-        {
-          "page": "3",
-          "score": 0.535
-        },
-        {
-          "page": "4",
-          "score": 0.528
-        },
-        {
-          "page": "1",
-          "score": 0.45
-        },
-        {
-          "page": 1,
-          "score": 0.384
-        },
-        {
-          "page": 1,
-          "score": 0.374
-        },
-        {
-          "page": 1,
-          "score": 0.37
-        },
-        {
-          "page": 1,
-          "score": 0.359
+          "page": null,
+          "score": 0.418
         }
       ]
     },
     {
       "id": "q11",
+      "category": "未分类",
       "question": "担任院各干部机构部长及以上职务、朋辈辅导员加几分？",
       "expect_pages": [
         "2"
       ],
+      "abstain_case": false,
+      "top_score": 0.634,
+      "abstained": false,
+      "elapsed_ms": 1281.9,
       "rank": 0,
       "mrr": 1.0,
       "terms_ok": true,
@@ -475,44 +628,57 @@
       "retrieved": [
         {
           "page": "2",
-          "score": 0.628
+          "score": 0.634
         },
         {
-          "page": "4",
-          "score": 0.59
+          "page": null,
+          "score": 0.478
         },
         {
-          "page": "3",
-          "score": 0.57
+          "page": null,
+          "score": 0.477
         },
         {
-          "page": "1",
-          "score": 0.534
+          "page": null,
+          "score": 0.474
         },
         {
           "page": 1,
           "score": 0.474
         },
         {
-          "page": 1,
-          "score": 0.427
+          "page": null,
+          "score": 0.473
         },
         {
-          "page": 1,
-          "score": 0.415
+          "page": null,
+          "score": 0.47
         },
         {
-          "page": 1,
-          "score": 0.414
+          "page": null,
+          "score": 0.468
+        },
+        {
+          "page": null,
+          "score": 0.444
+        },
+        {
+          "page": null,
+          "score": 0.444
         }
       ]
     },
     {
       "id": "q12",
+      "category": "未分类",
       "question": "担任班长、团支书、学习委员加几分？",
       "expect_pages": [
         "2"
       ],
+      "abstain_case": false,
+      "top_score": 0.602,
+      "abstained": false,
+      "elapsed_ms": 1181.7,
       "rank": 0,
       "mrr": 1.0,
       "terms_ok": true,
@@ -520,44 +686,57 @@
       "retrieved": [
         {
           "page": "2",
-          "score": 0.569
+          "score": 0.602
+        },
+        {
+          "page": "2",
+          "score": 0.546
         },
         {
           "page": "1",
-          "score": 0.561
+          "score": 0.54
         },
         {
-          "page": "4",
-          "score": 0.56
+          "page": "1",
+          "score": 0.539
         },
         {
-          "page": "3",
-          "score": 0.538
+          "page": "2",
+          "score": 0.526
+        },
+        {
+          "page": null,
+          "score": 0.45
         },
         {
           "page": 1,
           "score": 0.441
         },
         {
-          "page": 1,
-          "score": 0.417
+          "page": null,
+          "score": 0.431
         },
         {
-          "page": 1,
-          "score": 0.411
+          "page": null,
+          "score": 0.415
         },
         {
-          "page": 1,
-          "score": 0.393
+          "page": null,
+          "score": 0.414
         }
       ]
     },
     {
       "id": "q13",
+      "category": "未分类",
       "question": "参与校内志愿服务每次加几分，累计上限是多少？",
       "expect_pages": [
         "2"
       ],
+      "abstain_case": false,
+      "top_score": 0.738,
+      "abstained": false,
+      "elapsed_ms": 1499.5,
       "rank": 0,
       "mrr": 1.0,
       "terms_ok": true,
@@ -565,44 +744,57 @@
       "retrieved": [
         {
           "page": "2",
-          "score": 0.641
+          "score": 0.738
+        },
+        {
+          "page": "2",
+          "score": 0.665
         },
         {
           "page": "3",
-          "score": 0.612
-        },
-        {
-          "page": "4",
-          "score": 0.556
+          "score": 0.648
         },
         {
           "page": "1",
-          "score": 0.521
+          "score": 0.568
         },
         {
-          "page": 1,
-          "score": 0.478
+          "page": "2",
+          "score": 0.562
         },
         {
-          "page": 1,
-          "score": 0.437
+          "page": "4",
+          "score": 0.559
         },
         {
-          "page": 1,
-          "score": 0.435
+          "page": "4",
+          "score": 0.541
         },
         {
-          "page": 1,
-          "score": 0.421
+          "page": null,
+          "score": 0.406
+        },
+        {
+          "page": null,
+          "score": 0.392
+        },
+        {
+          "page": null,
+          "score": 0.389
         }
       ]
     },
     {
       "id": "q14",
+      "category": "未分类",
       "question": "寒暑假社会实践和宣讲活动每次加几分，累计上限是多少？",
       "expect_pages": [
         "3"
       ],
+      "abstain_case": false,
+      "top_score": 0.64,
+      "abstained": false,
+      "elapsed_ms": 1112.2,
       "rank": 0,
       "mrr": 1.0,
       "terms_ok": true,
@@ -610,46 +802,59 @@
       "retrieved": [
         {
           "page": "3",
-          "score": 0.622
+          "score": 0.64
         },
         {
           "page": "2",
-          "score": 0.591
+          "score": 0.628
         },
         {
-          "page": "4",
-          "score": 0.538
+          "page": "2",
+          "score": 0.589
+        },
+        {
+          "page": "3",
+          "score": 0.546
+        },
+        {
+          "page": "3",
+          "score": 0.539
         },
         {
           "page": "1",
-          "score": 0.504
+          "score": 0.537
         },
         {
-          "page": 1,
-          "score": 0.451
+          "page": "4",
+          "score": 0.536
         },
         {
-          "page": 1,
-          "score": 0.414
+          "page": "2",
+          "score": 0.525
         },
         {
-          "page": 1,
-          "score": 0.412
+          "page": "4",
+          "score": 0.503
         },
         {
-          "page": 1,
-          "score": 0.4
+          "page": "1",
+          "score": 0.482
         }
       ]
     },
     {
       "id": "q15",
+      "category": "未分类",
       "question": "参加学院组织的校外服务活动（如社区服务、关爱老人）每次加几分？",
       "expect_pages": [
         "3"
       ],
-      "rank": 7,
-      "mrr": 0.125,
+      "abstain_case": false,
+      "top_score": 0.739,
+      "abstained": false,
+      "elapsed_ms": 1319.1,
+      "rank": 6,
+      "mrr": 0.14285714285714285,
       "terms_ok": false,
       "missing_terms": [
         "加2分每次"
@@ -657,31 +862,35 @@
       "retrieved": [
         {
           "page": "2",
-          "score": 0.659
+          "score": 0.739
+        },
+        {
+          "page": "2",
+          "score": 0.636
         },
         {
           "page": "4",
-          "score": 0.616
+          "score": 0.603
+        },
+        {
+          "page": "4",
+          "score": 0.591
+        },
+        {
+          "page": "2",
+          "score": 0.575
         },
         {
           "page": "1",
-          "score": 0.529
+          "score": 0.574
         },
         {
-          "page": 1,
-          "score": 0.463
+          "page": "3",
+          "score": 0.549
         },
         {
-          "page": 1,
-          "score": 0.41
-        },
-        {
-          "page": 1,
-          "score": 0.41
-        },
-        {
-          "page": 1,
-          "score": 0.392
+          "page": "1",
+          "score": 0.52
         },
         {
           "page": "3",
@@ -691,43 +900,72 @@
     },
     {
       "id": "q16",
+      "category": "未分类",
       "question": "服务工作业绩获省级、校级、院级荣誉每项分别加几分？一、二、三等奖的系数是多少？",
       "expect_pages": [
         "3"
       ],
-      "rank": 0,
-      "mrr": 1.0,
-      "terms_ok": true,
-      "missing_terms": [],
+      "abstain_case": false,
+      "top_score": 0.645,
+      "abstained": false,
+      "elapsed_ms": 1784.6,
+      "rank": 1,
+      "mrr": 0.5,
+      "terms_ok": false,
+      "missing_terms": [
+        "每项加10、5、1分",
+        "1/0.8/0.5"
+      ],
       "retrieved": [
+        {
+          "page": "2",
+          "score": 0.645
+        },
+        {
+          "page": "3",
+          "score": 0.553
+        },
+        {
+          "page": null,
+          "score": 0.428
+        },
+        {
+          "page": null,
+          "score": 0.426
+        },
+        {
+          "page": null,
+          "score": 0.425
+        },
+        {
+          "page": null,
+          "score": 0.42
+        },
+        {
+          "page": null,
+          "score": 0.42
+        },
         {
           "page": "3",
           "score": -1.0
         },
         {
           "page": 1,
-          "score": -1.0
-        },
-        {
-          "page": "4",
-          "score": -1.0
-        },
-        {
-          "page": "2",
-          "score": -1.0
-        },
-        {
-          "page": "1",
           "score": -1.0
         }
       ]
     },
     {
       "id": "q17",
+      "category": "未分类",
       "question": "同一项目同时具备多项加分条件时怎么计算？",
       "expect_pages": [
         "3"
       ],
+      "abstain_case": false,
+      "top_score": 0.576,
+      "abstained": false,
+      "elapsed_ms": 1146.0,
       "rank": 0,
       "mrr": 1.0,
       "terms_ok": true,
@@ -735,46 +973,59 @@
       "retrieved": [
         {
           "page": "3",
-          "score": 0.562
+          "score": 0.576
+        },
+        {
+          "page": "3",
+          "score": 0.555
+        },
+        {
+          "page": "3",
+          "score": 0.554
         },
         {
           "page": "2",
-          "score": 0.542
+          "score": 0.512
+        },
+        {
+          "page": "2",
+          "score": 0.504
         },
         {
           "page": "4",
-          "score": 0.528
+          "score": 0.471
         },
         {
           "page": "1",
-          "score": 0.461
+          "score": 0.446
         },
         {
-          "page": 1,
-          "score": 0.428
+          "page": null,
+          "score": 0.372
         },
         {
-          "page": 1,
-          "score": 0.422
+          "page": null,
+          "score": 0.371
         },
         {
-          "page": 1,
-          "score": 0.398
-        },
-        {
-          "page": 1,
-          "score": 0.393
+          "page": null,
+          "score": 0.37
         }
       ]
     },
     {
       "id": "q18",
+      "category": "未分类",
       "question": "学科竞赛国家级一等奖（排名第一）加几分？省级一等奖加几分？",
       "expect_pages": [
         "3"
       ],
-      "rank": 7,
-      "mrr": 0.125,
+      "abstain_case": false,
+      "top_score": 0.563,
+      "abstained": false,
+      "elapsed_ms": 1301.3,
+      "rank": 0,
+      "mrr": 1.0,
       "terms_ok": false,
       "missing_terms": [
         "20、18、16分",
@@ -782,32 +1033,36 @@
       ],
       "retrieved": [
         {
-          "page": "4",
-          "score": 0.541
+          "page": "3",
+          "score": 0.563
         },
         {
-          "page": "2",
-          "score": 0.486
+          "page": "4",
+          "score": 0.551
         },
         {
           "page": "1",
-          "score": 0.459
+          "score": 0.447
         },
         {
-          "page": 1,
-          "score": 0.418
+          "page": null,
+          "score": 0.4
         },
         {
-          "page": 1,
-          "score": 0.397
+          "page": null,
+          "score": 0.399
         },
         {
-          "page": 1,
-          "score": 0.39
+          "page": null,
+          "score": 0.395
         },
         {
-          "page": 1,
-          "score": 0.365
+          "page": null,
+          "score": 0.392
+        },
+        {
+          "page": null,
+          "score": 0.392
         },
         {
           "page": "3",
@@ -817,10 +1072,15 @@
     },
     {
       "id": "q19",
+      "category": "未分类",
       "question": "学科竞赛排名第二和排名更靠后的，分别怎么算分？",
       "expect_pages": [
         "3"
       ],
+      "abstain_case": false,
+      "top_score": 0.522,
+      "abstained": false,
+      "elapsed_ms": 1145.8,
       "rank": 0,
       "mrr": 1.0,
       "terms_ok": true,
@@ -828,64 +1088,73 @@
       "retrieved": [
         {
           "page": "3",
-          "score": 0.468
+          "score": 0.522
+        },
+        {
+          "page": "3",
+          "score": 0.503
         },
         {
           "page": "4",
-          "score": 0.466
+          "score": 0.459
+        },
+        {
+          "page": "3",
+          "score": 0.429
         },
         {
           "page": "1",
-          "score": 0.431
+          "score": 0.423
         },
         {
           "page": "2",
-          "score": 0.411
+          "score": 0.397
         },
         {
-          "page": 1,
-          "score": 0.384
+          "page": null,
+          "score": 0.388
         },
         {
-          "page": 1,
-          "score": 0.345
+          "page": null,
+          "score": 0.379
         },
         {
-          "page": 1,
-          "score": 0.344
+          "page": null,
+          "score": 0.372
         },
         {
-          "page": 1,
-          "score": 0.326
+          "page": null,
+          "score": 0.371
         }
       ]
     },
     {
       "id": "q20",
+      "category": "未分类",
       "question": "大学生创新创业项目获国家级立项，负责人加几分？其他成员呢？",
       "expect_pages": [
         "3"
       ],
-      "rank": 1,
-      "mrr": 0.5,
+      "abstain_case": false,
+      "top_score": 0.7,
+      "abstained": false,
+      "elapsed_ms": 1312.9,
+      "rank": 0,
+      "mrr": 1.0,
       "terms_ok": true,
       "missing_terms": [],
       "retrieved": [
         {
-          "page": "4",
-          "score": 0.519
+          "page": "3",
+          "score": 0.7
         },
         {
           "page": "3",
-          "score": 0.517
+          "score": 0.503
         },
         {
           "page": "2",
-          "score": 0.468
-        },
-        {
-          "page": "1",
-          "score": 0.457
+          "score": 0.484
         },
         {
           "page": 1,
@@ -900,17 +1169,34 @@
           "score": 0.417
         },
         {
-          "page": 1,
-          "score": 0.393
+          "page": null,
+          "score": 0.41
+        },
+        {
+          "page": null,
+          "score": 0.409
+        },
+        {
+          "page": null,
+          "score": 0.401
+        },
+        {
+          "page": null,
+          "score": 0.397
         }
       ]
     },
     {
       "id": "q21",
+      "category": "未分类",
       "question": "以第一作者发表核心期刊加几分？独著还能额外加几分？",
       "expect_pages": [
         "4"
       ],
+      "abstain_case": false,
+      "top_score": 0.59,
+      "abstained": false,
+      "elapsed_ms": 1134.1,
       "rank": 0,
       "mrr": 1.0,
       "terms_ok": true,
@@ -918,89 +1204,57 @@
       "retrieved": [
         {
           "page": "4",
-          "score": 0.577
+          "score": 0.59
         },
         {
           "page": "3",
-          "score": 0.532
+          "score": 0.542
         },
         {
-          "page": "2",
-          "score": 0.478
+          "page": "3",
+          "score": 0.501
         },
         {
           "page": "1",
-          "score": 0.475
+          "score": 0.44
         },
         {
-          "page": 1,
-          "score": 0.399
+          "page": null,
+          "score": 0.367
         },
         {
-          "page": 1,
-          "score": 0.393
+          "page": null,
+          "score": 0.366
         },
         {
-          "page": 1,
-          "score": 0.387
-        },
-        {
-          "page": 1,
+          "page": null,
           "score": 0.365
-        }
-      ]
-    },
-    {
-      "id": "q22",
-      "question": "省级以上期刊第一作者、第二作者分别加几分？",
-      "expect_pages": [
-        "4"
-      ],
-      "rank": 0,
-      "mrr": 1.0,
-      "terms_ok": true,
-      "missing_terms": [],
-      "retrieved": [
-        {
-          "page": "4",
-          "score": 0.549
         },
         {
-          "page": "3",
-          "score": 0.52
-        },
-        {
-          "page": "1",
-          "score": 0.456
-        },
-        {
-          "page": "2",
-          "score": 0.439
-        },
-        {
-          "page": 1,
-          "score": 0.377
-        },
-        {
-          "page": 1,
-          "score": 0.369
-        },
-        {
-          "page": 1,
+          "page": null,
           "score": 0.363
         },
         {
-          "page": 1,
+          "page": null,
+          "score": 0.36
+        },
+        {
+          "page": null,
           "score": 0.358
         }
       ]
     },
     {
-      "id": "q23",
-      "question": "文体艺术活动校级一、二、三等奖分别加几分？",
+      "id": "q22",
+      "category": "未分类",
+      "question": "省级以上期刊第一作者、第二作者分别加几分？",
       "expect_pages": [
         "4"
       ],
+      "abstain_case": false,
+      "top_score": 0.573,
+      "abstained": false,
+      "elapsed_ms": 1261.6,
       "rank": 0,
       "mrr": 1.0,
       "terms_ok": true,
@@ -1008,70 +1262,151 @@
       "retrieved": [
         {
           "page": "4",
-          "score": 0.581
-        },
-        {
-          "page": 1,
-          "score": 0.4
-        },
-        {
-          "page": 1,
-          "score": -1.0
-        },
-        {
-          "page": "2",
-          "score": -1.0
-        },
-        {
-          "page": "1",
-          "score": -1.0
+          "score": 0.573
         },
         {
           "page": "3",
+          "score": 0.537
+        },
+        {
+          "page": null,
+          "score": 0.382
+        },
+        {
+          "page": null,
+          "score": 0.38
+        },
+        {
+          "page": null,
+          "score": 0.38
+        },
+        {
+          "page": null,
+          "score": 0.379
+        },
+        {
+          "page": null,
+          "score": 0.377
+        },
+        {
+          "page": null,
+          "score": 0.377
+        },
+        {
+          "page": null,
+          "score": 0.376
+        },
+        {
+          "page": null,
+          "score": 0.375
+        }
+      ]
+    },
+    {
+      "id": "q23",
+      "category": "未分类",
+      "question": "文体艺术活动校级一、二、三等奖分别加几分？",
+      "expect_pages": [
+        "4"
+      ],
+      "abstain_case": false,
+      "top_score": 0.604,
+      "abstained": false,
+      "elapsed_ms": 1472.7,
+      "rank": 0,
+      "mrr": 1.0,
+      "terms_ok": true,
+      "missing_terms": [],
+      "retrieved": [
+        {
+          "page": "4",
+          "score": 0.604
+        },
+        {
+          "page": "3",
+          "score": 0.572
+        },
+        {
+          "page": "3",
+          "score": 0.565
+        },
+        {
+          "page": "3",
+          "score": 0.526
+        },
+        {
+          "page": "2",
+          "score": 0.523
+        },
+        {
+          "page": "2",
+          "score": 0.5
+        },
+        {
+          "page": 1,
+          "score": -1.0
+        },
+        {
+          "page": null,
+          "score": -1.0
+        },
+        {
+          "page": null,
+          "score": -1.0
+        },
+        {
+          "page": null,
           "score": -1.0
         }
       ]
     },
     {
       "id": "q24",
+      "category": "未分类",
       "question": "获得校、院优秀寝室每次加几分，上限多少？宿舍卫生不合格怎么处理？",
       "expect_pages": [
         "4"
       ],
-      "rank": 7,
-      "mrr": 0.125,
-      "terms_ok": false,
-      "missing_terms": [
-        "每次扣2分"
-      ],
+      "abstain_case": false,
+      "top_score": 0.657,
+      "abstained": false,
+      "elapsed_ms": 1336.3,
+      "rank": 0,
+      "mrr": 1.0,
+      "terms_ok": true,
+      "missing_terms": [],
       "retrieved": [
         {
-          "page": "3",
-          "score": 0.566
+          "page": "4",
+          "score": 0.657
         },
         {
           "page": "2",
-          "score": 0.552
+          "score": 0.545
+        },
+        {
+          "page": "2",
+          "score": 0.539
         },
         {
           "page": "1",
-          "score": 0.512
+          "score": 0.523
+        },
+        {
+          "page": "3",
+          "score": 0.515
+        },
+        {
+          "page": "2",
+          "score": 0.509
+        },
+        {
+          "page": "1",
+          "score": 0.473
         },
         {
           "page": 1,
           "score": 0.449
-        },
-        {
-          "page": 1,
-          "score": 0.417
-        },
-        {
-          "page": 1,
-          "score": 0.416
-        },
-        {
-          "page": 1,
-          "score": 0.404
         },
         {
           "page": "4",
@@ -1081,10 +1416,15 @@
     },
     {
       "id": "q25",
+      "category": "未分类",
       "question": "班级团员得票率达到多少以上可以加5分？",
       "expect_pages": [
         "4"
       ],
+      "abstain_case": false,
+      "top_score": 0.601,
+      "abstained": false,
+      "elapsed_ms": 1064.5,
       "rank": 0,
       "mrr": 1.0,
       "terms_ok": true,
@@ -1092,89 +1432,115 @@
       "retrieved": [
         {
           "page": "4",
-          "score": 0.571
-        },
-        {
-          "page": "2",
-          "score": 0.544
+          "score": 0.601
         },
         {
           "page": "1",
+          "score": 0.545
+        },
+        {
+          "page": "2",
           "score": 0.543
         },
         {
-          "page": "3",
-          "score": 0.526
+          "page": "1",
+          "score": 0.533
+        },
+        {
+          "page": "4",
+          "score": 0.528
+        },
+        {
+          "page": "2",
+          "score": 0.514
+        },
+        {
+          "page": "1",
+          "score": 0.497
         },
         {
           "page": 1,
           "score": 0.458
         },
         {
-          "page": 1,
-          "score": 0.447
+          "page": null,
+          "score": 0.384
         },
         {
-          "page": 1,
-          "score": 0.44
-        },
-        {
-          "page": 1,
-          "score": 0.42
+          "page": null,
+          "score": 0.367
         }
       ]
     },
     {
       "id": "q26",
+      "category": "未分类",
       "question": "见义勇为或妥善处置重大突发事件加几分？",
       "expect_pages": [
         "4"
       ],
-      "rank": 2,
-      "mrr": 0.3333333333333333,
+      "abstain_case": false,
+      "top_score": 0.484,
+      "abstained": false,
+      "elapsed_ms": 1213.9,
+      "rank": 1,
+      "mrr": 0.5,
       "terms_ok": true,
       "missing_terms": [],
       "retrieved": [
         {
-          "page": "3",
-          "score": 0.476
-        },
-        {
           "page": "2",
-          "score": 0.473
+          "score": 0.484
         },
         {
           "page": "4",
-          "score": 0.458
+          "score": 0.457
         },
         {
-          "page": "1",
-          "score": 0.427
+          "page": "2",
+          "score": 0.45
         },
         {
-          "page": 1,
-          "score": 0.379
+          "page": null,
+          "score": 0.439
         },
         {
-          "page": 1,
-          "score": 0.34
+          "page": null,
+          "score": 0.401
         },
         {
-          "page": 1,
-          "score": 0.338
+          "page": null,
+          "score": 0.4
         },
         {
-          "page": 1,
-          "score": 0.332
+          "page": null,
+          "score": 0.384
+        },
+        {
+          "page": null,
+          "score": 0.383
+        },
+        {
+          "page": null,
+          "score": 0.381
+        },
+        {
+          "page": null,
+          "score": 0.376
         }
       ]
     },
     {
       "id": "q27",
+      "category": "未分类",
       "question": "发明专利、软件著作权、实用新型专利怎么加分？",
       "expect_pages": [
         "4"
       ],
+      "abstain_case": false,
+      "top_score": 0.517,
+      "abstained": false,
+      "elapsed_ms": 1034.9,
       "rank": 7,
       "mrr": 0.125,
       "terms_ok": false,
@@ -1184,31 +1550,35 @@
       "retrieved": [
         {
           "page": "3",
-          "score": 0.5
+          "score": 0.517
+        },
+        {
+          "page": "3",
+          "score": 0.499
         },
         {
           "page": "2",
+          "score": 0.479
+        },
+        {
+          "page": "3",
           "score": 0.477
         },
         {
           "page": "1",
-          "score": 0.456
+          "score": 0.448
         },
         {
-          "page": 1,
-          "score": 0.392
+          "page": "1",
+          "score": 0.441
         },
         {
-          "page": 1,
-          "score": 0.391
+          "page": "2",
+          "score": 0.428
         },
         {
-          "page": 1,
-          "score": 0.385
-        },
-        {
-          "page": 1,
-          "score": 0.378
+          "page": "4",
+          "score": 0.425
         },
         {
           "page": "4",

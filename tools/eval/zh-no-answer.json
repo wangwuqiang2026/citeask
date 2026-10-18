@@ -1,0 +1,85 @@
+{
+  "name": "无答案集（拒答闸门校准）",
+  "corpus": "学生综合素质积分管理办法（示例）.pdf",
+  "notes": [
+    "这些问题的答案不在语料里（校园生活类），用来校准「拒答闸门」的阈值：",
+    "正确的行为是明确说「知识库里没有找到依据」，而不是让模型硬答。",
+    "expect_answer=false 表示该题没有标准答案；评测工具据此统计 abstain 率，",
+    "并同时统计这一阈值会不会误伤正常题目（false reject）。",
+    "阈值本身是配置项 KH_ABSTAIN_SCORE_THRESHOLD（默认 0.42），见 MODIFICATIONS §5.8。"
+  ],
+  "questions": [
+    {
+      "id": "n01",
+      "category": "T4",
+      "expect_answer": false,
+      "question": "学校食堂几点开门？"
+    },
+    {
+      "id": "n02",
+      "category": "T4",
+      "expect_answer": false,
+      "question": "图书馆一次最多可以借几本书？"
+    },
+    {
+      "id": "n03",
+      "category": "T4",
+      "expect_answer": false,
+      "question": "宿舍晚上几点熄灯？"
+    },
+    {
+      "id": "n04",
+      "category": "T4",
+      "expect_answer": false,
+      "question": "校园网 WiFi 密码是多少？"
+    },
+    {
+      "id": "n05",
+      "category": "T4",
+      "expect_answer": false,
+      "question": "学校的校长是谁？"
+    },
+    {
+      "id": "n06",
+      "category": "T4",
+      "expect_answer": false,
+      "question": "校车时刻表在哪里查？"
+    },
+    {
+      "id": "n07",
+      "category": "T4",
+      "expect_answer": false,
+      "question": "健身房开放到几点？"
+    },
+    {
+      "id": "n08",
+      "category": "T4",
+      "expect_answer": false,
+      "question": "学生证丢了怎么补办？"
+    },
+    {
+      "id": "n09",
+      "category": "T4",
+      "expect_answer": false,
+      "question": "毕业典礼是哪一天？"
+    },
+    {
+      "id": "n10",
+      "category": "T4",
+      "expect_answer": false,
+      "question": "学校一共有几个校区？"
+    },
+    {
+      "id": "n11",
+      "category": "T4",
+      "expect_answer": false,
+      "question": "一年的学费是多少钱？"
+    },
+    {
+      "id": "n12",
+      "category": "T4",
+      "expect_answer": false,
+      "question": "教务处的电话是多少？"
+    }
+  ]
+}

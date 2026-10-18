@@ -1,5 +1,9 @@
+import json
 import logging
 import threading
+import time
+from datetime import datetime
+from pathlib import Path
 from textwrap import dedent
 from typing import Generator
 
@@ -10,10 +14,14 @@ from ktem.reasoning.prompt_optimization import (
     DecomposeQuestionPipeline,
     RewriteQuestionPipeline,
 )
+from ktem.utils.i18n import tr
 from ktem.utils.render import Render
+from ktem.utils.trace import TraceRecorder
 from ktem.utils.visualize_cited import CreateCitationVizPipeline
 from plotly.io import to_json
+from theflow.settings import settings as flowsettings
 
+from kotaemon.abstain import best_similarity, should_refuse
 from kotaemon.base import (
     AIMessage,
     BaseComponent,
@@ -32,11 +40,110 @@ from kotaemon.indices.qa.citation_qa_inline import AnswerWithInlineCitation
 from kotaemon.indices.qa.format_context import PrepareEvidencePipeline
 from kotaemon.indices.qa.utils import replace_think_tag_with_details
 from kotaemon.llms import ChatLLM
+from kotaemon.llms.usage import usage
 
 from ..utils import SUPPORTED_LANGUAGE_MAP
 from .base import BaseReasoning
 
 logger = logging.getLogger(__name__)
+
+#: Refusal gate (ROADMAP B4). Messages keep the i18n discipline of the project: the
+#: source string is English and ``tr()`` looks it up in the catalog, so the catalog
+#: stays the only place with translated text.
+ABSTAIN_INFO_TEMPLATE = (
+    "<h5>No strong evidence for this question: the best match scores {score:.2f}, "
+    "below the {threshold:.2f} threshold, so the answer was skipped.</h5>"
+)
+ABSTAIN_ANSWER_TEMPLATE = (
+    "The knowledge base has no evidence for this question "
+    "(best match {score:.2f}, below the {threshold:.2f} threshold).\n\n"
+    "What to try:\n"
+    "1. use more specific keywords;\n"
+    "2. check that the file finished indexing (Files tab shows blocks and loader);\n"
+    '3. under "Search in File(s)", pick the file explicitly.'
+)
+
+
+def abstain_threshold() -> float:
+    """Similarity below which an answer is refused; ``0`` disables the gate."""
+    return float(getattr(flowsettings, "KH_ABSTAIN_SCORE_THRESHOLD", 0.0) or 0.0)
+
+
+def abstain_term_floor() -> float:
+    """Similarity that still counts once a rare entity term matched the question."""
+    return float(getattr(flowsettings, "KH_ABSTAIN_TERM_FLOOR", 0.33) or 0.0)
+
+
+def abstain_log_path() -> Path:
+    configured = getattr(flowsettings, "KH_ABSTAIN_LOG", None)
+    if configured:
+        return Path(configured)
+    data_dir = Path(getattr(flowsettings, "KH_APP_DATA_DIR", "."))
+    return data_dir / "abstained_queries.jsonl"
+
+
+def log_abstention(
+    question: str, score: float, threshold: float, reason: str = "low_score"
+) -> None:
+    """Record a refused query so the gate can be audited (ROADMAP B4)."""
+    path = abstain_log_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(
+                json.dumps(
+                    {
+                        "time": datetime.now().isoformat(timespec="seconds"),
+                        "question": question,
+                        "best_score": round(score, 4),
+                        "threshold": threshold,
+                        "reason": reason,
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
+    except OSError as exc:  # a log failure must never break the answer path
+        logger.warning("could not write the abstention log %s: %s", path, exc)
+
+
+def abstain_events(
+    question: str, docs: list, threshold: float | None = None
+) -> list[Document]:
+    """Documents to emit when the evidence is too weak (empty when it is not).
+
+    Kept as a module function (rather than a pipeline method) so the decision and the
+    text can be tested without building the whole reasoning pipeline.
+
+    The documents and the question are passed through so a rare entity term (a name in
+    a spreadsheet row, an id) can lower the bar: a dense table answers a correct
+    question at a similarity far below what prose reaches (MODIFICATIONS §5.8).
+    """
+    threshold = abstain_threshold() if threshold is None else threshold
+    scores = [float(getattr(doc, "score", 0.0) or 0.0) for doc in docs]
+    if not should_refuse(
+        scores,
+        threshold,
+        documents=docs,
+        question=question,
+        term_floor=abstain_term_floor(),
+    ):
+        return []
+
+    best = best_similarity(scores) or 0.0
+    log_abstention(question, best, threshold)
+    return [
+        Document(
+            channel="info",
+            content=tr(ABSTAIN_INFO_TEMPLATE).format(score=best, threshold=threshold),
+        ),
+        Document(
+            channel="chat",
+            content=tr(ABSTAIN_ANSWER_TEMPLATE).format(
+                score=best, threshold=threshold
+            ),
+        ),
+    ]
 
 
 class AddQueryContextPipeline(BaseComponent):
@@ -286,11 +393,31 @@ class FullQAPipeline(BaseReasoning):
             message = self.rewrite_pipeline(question=message).text
             print("Rewrite result", message)
 
+        started = time.perf_counter()
+        usage_before = usage.snapshot()
+        trace = TraceRecorder()
+
         print(f"Retrievers {self.retrievers}")
         # should populate the context
         docs, infos = self.retrieve(message, history)
         print(f"Got {len(docs)} retrieved documents")
         yield from infos
+
+        # refusal gate: no evidence strong enough means no answer from memory
+        refused = abstain_events(message, docs)
+        if refused:
+            print("Refusing to answer: the evidence is too weak")
+            yield from refused
+            self._trace_query(
+                trace,
+                message,
+                docs,
+                abstained=True,
+                started=started,
+                usage_before=usage_before,
+                answer_text=refused[-1].content,
+            )
+            return Document(text=refused[-1].content, channel="chat")
 
         evidence_mode, evidence, images = self.evidence_pipeline(docs).content
 
@@ -326,9 +453,50 @@ class FullQAPipeline(BaseReasoning):
         if scoring_thread:
             scoring_thread.join()
 
+        self._trace_query(
+            trace,
+            message,
+            docs,
+            abstained=False,
+            started=started,
+            usage_before=usage_before,
+            answer_text=answer.text,
+        )
+
         yield from self.show_citations_and_addons(answer, docs, message)
 
         return answer
+
+    def _trace_query(
+        self,
+        trace: TraceRecorder,
+        question: str,
+        docs: list,
+        *,
+        abstained: bool,
+        started: float,
+        usage_before: dict,
+        answer_text: str = "",
+    ) -> None:
+        """Write one trace line for this question (no-op when tracing is off)."""
+        if not trace.enabled:
+            return
+        scores = [float(getattr(doc, "score", 0.0) or 0.0) for doc in docs]
+        reranked = (
+            bool(getattr(self.retrievers[0], "rerankers", []))
+            if self.retrievers
+            else False
+        )
+        trace.record(
+            question=question,
+            retrieved=len(docs),
+            top_score=round(best_similarity(scores) or 0.0, 4),
+            reranked=reranked,
+            abstained=abstained,
+            answer_chars=len(answer_text or ""),
+            total_ms=round((time.perf_counter() - started) * 1000, 1),
+            **usage.since(usage_before),
+        )
 
     @classmethod
     def prepare_pipeline_instance(cls, settings, retrievers):
@@ -501,6 +669,15 @@ class FullDecomposeQAPipeline(FullQAPipeline):
 
             yield from infos
 
+            refused = abstain_events(message, docs)
+            if refused:
+                print("Refusing to answer a sub-question: evidence too weak")
+                yield from refused
+                output_str += (
+                    f"Sub-question {idx + 1}-th: '{message}'\nAnswer: (refused)\n\n"
+                )
+                continue
+
             evidence_mode, evidence, images = self.evidence_pipeline(docs).content
             answer = yield from self.answering_pipeline.stream(
                 question=message,
@@ -550,6 +727,12 @@ class FullDecomposeQAPipeline(FullQAPipeline):
         docs, infos = self.retrieve(message, history)
         print(f"Got {len(docs)} retrieved documents")
         yield from infos
+
+        refused = abstain_events(message, docs)
+        if refused:
+            print("Refusing to answer the main question: evidence too weak")
+            yield from refused
+            return Document(text=refused[-1].content, channel="chat")
 
         evidence_mode, evidence, images = self.evidence_pipeline(docs).content
         answer = yield from self.answering_pipeline.stream(

@@ -32,6 +32,11 @@ class CohereReranking(BaseReranking):
         required=False,
     )
 
+    def is_available(self) -> bool:
+        """Cohere needs a real API key; without one ``run`` returns the list as-is."""
+        key = str(self.cohere_api_key or "")
+        return bool(key) and "COHERE_API_KEY" not in key
+
     def run(self, documents: list[Document], query: str) -> list[Document]:
         """Use Cohere Reranker model to re-order documents
         with their relevance score"""
@@ -42,7 +47,7 @@ class CohereReranking(BaseReranking):
                 "Please install Cohere " "`pip install cohere` to use Cohere Reranking"
             )
 
-        if not self.cohere_api_key or "COHERE_API_KEY" in self.cohere_api_key:
+        if not self.is_available():
             print("Cohere API key not found. Skipping rerankings.")
             return documents
 

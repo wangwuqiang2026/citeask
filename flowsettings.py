@@ -28,6 +28,11 @@ if not KH_APP_VERSION:
         KH_APP_VERSION = "local"
 
 KH_GRADIO_SHARE = config("KH_GRADIO_SHARE", default=False, cast=bool)
+# Open the browser when the app finishes starting. The Windows launcher sets this to 0
+# and opens the page itself once the port answers 200 — opening too early lands on a
+# "connection refused" tab, and on some hosts `webbrowser.open` does nothing at all
+# (MODIFICATIONS 5.6). Direct `python app.py` keeps the old behaviour.
+KH_OPEN_BROWSER_ON_START = config("KH_OPEN_BROWSER_ON_START", default=True, cast=bool)
 KH_ENABLE_FIRST_SETUP = config("KH_ENABLE_FIRST_SETUP", default=True, cast=bool)
 KH_DEMO_MODE = config("KH_DEMO_MODE", default=False, cast=bool)
 KH_OLLAMA_URL = config("KH_OLLAMA_URL", default="http://localhost:11434/v1/")
@@ -85,9 +90,7 @@ KH_UI_TRANSLATOR = config("KH_UI_TRANSLATOR", default="llm")
 # Translate strings missing from the catalog while starting up. Off by default:
 # the free services need ~2s per string, so building the catalog is an explicit
 # step (`python -m ktem.utils.i18n build`) and startup only reads the cache.
-KH_UI_TRANSLATE_MISSING = config(
-    "KH_UI_TRANSLATE_MISSING", default=False, cast=bool
-)
+KH_UI_TRANSLATE_MISSING = config("KH_UI_TRANSLATE_MISSING", default=False, cast=bool)
 # Language the chat model is asked to answer in. It follows the UI language by
 # default: the QA prompt ends with "Give answer in {lang}", so this single value
 # is what keeps the answers from being English on a Chinese UI. Override with the
@@ -114,6 +117,75 @@ KH_FEATURE_USER_MANAGEMENT_PASSWORD = str(
 KH_ENABLE_ALEMBIC = False
 KH_DATABASE = f"sqlite:///{KH_USER_DATA_DIR / 'sql.db'}"
 KH_FILESTORAGE_PATH = str(KH_USER_DATA_DIR / "files")
+# Re-parse, at startup, the files that are listed in the index but have no chunks
+# (a parse that failed before its reader was fixed — MODIFICATIONS §2.7/§2.9/§2.10).
+# Runs in a background thread; re-embedding a 10 MB spreadsheet takes minutes, so
+# set to False if the machine must not spend that much at boot.
+KH_REPAIR_ORPHAN_FILES = config("KH_REPAIR_ORPHAN_FILES", default=True, cast=bool)
+# Chunking granularity (ROADMAP B3). Left at 0 the index keeps one chunk per page,
+# which is coarse for long pages; setting 512/64 splits by token instead. The
+# measured A/B is in MODIFICATIONS §5.7 — set 0 here to fall back to page chunks.
+# Changing this only affects files indexed afterwards: re-run
+# `python tools/reindex_corpus.py` to apply it to an existing corpus.
+FILE_INDEX_PIPELINE_SPLITTER_CHUNK_SIZE = config(
+    "FILE_INDEX_PIPELINE_SPLITTER_CHUNK_SIZE", default=512, cast=int
+)
+FILE_INDEX_PIPELINE_SPLITTER_CHUNK_OVERLAP = config(
+    "FILE_INDEX_PIPELINE_SPLITTER_CHUNK_OVERLAP", default=64, cast=int
+)
+# Refusal gate (ROADMAP B4): when the best retrieval score is below this, the chat
+# page says "the knowledge base has no evidence" instead of letting the model answer
+# from its own memory. Threshold calibrated on tools/eval/zh-no-answer.json — the
+# measurement is in MODIFICATIONS §5.8; 0 disables the gate (only "nothing retrieved"
+# is refused, which was the old behaviour).
+KH_ABSTAIN_SCORE_THRESHOLD = config(
+    "KH_ABSTAIN_SCORE_THRESHOLD", default=0.45, cast=float
+)
+# A rare entity term (a name in a table row, an id) in a retrieved chunk lowers the bar
+# to this floor: a dense spreadsheet row answers correctly far below the prose threshold
+# (MODIFICATIONS 5.8). Set to 0 to disable the override.
+KH_ABSTAIN_TERM_FLOOR = config("KH_ABSTAIN_TERM_FLOOR", default=0.33, cast=float)
+# Per-file retrieval: keep the best chunk of every file before the second chunk of any
+# file, so one large spreadsheet cannot take every context slot (MODIFICATIONS 5.13).
+KH_RETRIEVAL_PER_FILE = config("KH_RETRIEVAL_PER_FILE", default=True, cast=bool)
+# How many candidates per slot to fetch before the per-file pass (3 = 3x top_k).
+KH_RETRIEVAL_CANDIDATES = config("KH_RETRIEVAL_CANDIDATES", default=3, cast=int)
+# A file that the global ranking left out gets its own query, up to this many files, and
+# contributes this many chunks (each extra query costs one embedding call).
+KH_RETRIEVAL_MAX_FILES = config("KH_RETRIEVAL_MAX_FILES", default=8, cast=int)
+KH_RETRIEVAL_PER_FILE_K = config("KH_RETRIEVAL_PER_FILE_K", default=3, cast=int)
+# File routing: every indexed file keeps a short profile ("文件：… 内容摘录：…") in
+# Source.note["summary"]; a question is then routed to the few closest files instead of
+# searching the whole selection (MODIFICATIONS 5.14).
+KH_FILE_ROUTING = config("KH_FILE_ROUTING", default=True, cast=bool)
+KH_FILE_ROUTING_TOP_M = config("KH_FILE_ROUTING_TOP_M", default=3, cast=int)
+KH_FILE_ROUTING_MIN_SIMILARITY = config(
+    "KH_FILE_ROUTING_MIN_SIMILARITY", default=0.30, cast=float
+)
+# A file is kept when its profile scores at least this share of the best one, so a
+# specific question is routed to a single file while an ambiguous one keeps near-ties.
+KH_FILE_ROUTING_MIN_RATIO = config(
+    "KH_FILE_ROUTING_MIN_RATIO", default=0.80, cast=float
+)
+# A profile says what a file is *about*, not who is *in* it: a grades spreadsheet whose
+# rows name the queried student can fall below the relative cut. Files whose full-text
+# hits name the entity in a table are added back (MODIFICATIONS 5.20). One full-text
+# query, no embedding; 0 disables the lookup.
+KH_ROUTING_ENTITY_FILES = config("KH_ROUTING_ENTITY_FILES", default=2, cast=int)
+KH_ROUTING_ENTITY_CANDIDATES = config(
+    "KH_ROUTING_ENTITY_CANDIDATES", default=30, cast=int
+)
+# A 10k-chunk spreadsheet added to the search scope takes over the candidate list even
+# when one of its rows holds the answer (MODIFICATIONS 5.13/5.20), so entity routing only
+# adds files below this many chunks; 0 means "any size".
+KH_ROUTING_ENTITY_MAX_CHUNKS = config(
+    "KH_ROUTING_ENTITY_MAX_CHUNKS", default=500, cast=int
+)
+# Per-query trace (ROADMAP C4): one JSON line per question with retrieved count, best
+# similarity, refusal flag, latency and the LLM usage that request consumed. Empty =
+# off; "1" = <app data>/query_trace.jsonl; anything else is used as the path. Read it
+# with `python tools/trace_report.py`.
+KH_QUERY_TRACE = config("KH_QUERY_TRACE", default="")
 KH_WEB_SEARCH_BACKEND = (
     "kotaemon.indices.retrievers.tavily_web_search.WebSearch"
     # "kotaemon.indices.retrievers.jina_web_search.WebSearch"
@@ -345,6 +417,15 @@ KH_RERANKINGS["cohere"] = {
     },
     "default": True,
 }
+# Local reranker: no key, no model, no network (MODIFICATIONS §5.9). Cohere without a
+# key is unusable, so the index pipeline falls back to this one — pick it here
+# explicitly if you prefer it even when a Cohere key is configured.
+# Note: the model pool is seeded only into an empty database, so an existing install
+# lists it after re-seeding (Resources → delete the row, or rebuild the app data).
+KH_RERANKINGS["local"] = {
+    "spec": {"__type__": "kotaemon.rerankings.LocalLexicalReranker"},
+    "default": False,
+}
 
 KH_REASONINGS = [
     "ktem.reasoning.simple.FullQAPipeline",
@@ -495,7 +576,11 @@ KH_EMBEDDINGS["dashscope"] = {
         "base_url": DASHSCOPE_API_BASE,
         "api_key": DASHSCOPE_API_KEY,
         "model": config("DASHSCOPE_EMBEDDING_MODEL", default="text-embedding-v3"),
-        "batch_size": 25,  # 通义单次请求的文本上限
+        # 通义单次请求的文本条数上限，实测是 10（文档写 25，接口会 400 报
+        # "batch size is invalid, it should not be larger than 10"）。这里给对的值，
+        # 客户端也会在服务端报错时自动采用它报出的上限，见
+        # kotaemon/embeddings/openai.py::BaseOpenAIEmbeddings._smaller_batch_size
+        "batch_size": 10,
     },
     "default": False,
 }

@@ -1,3 +1,5 @@
+import logging
+
 import gradio as gr
 from decouple import config
 from ktem.app import BaseApp
@@ -7,6 +9,8 @@ from ktem.pages.resources import ResourcesTab
 from ktem.pages.settings import SettingsPage
 from ktem.pages.setup import SetupPage
 from theflow.settings import settings as flowsettings
+
+logger = logging.getLogger(__name__)
 
 KH_DEMO_MODE = getattr(flowsettings, "KH_DEMO_MODE", False)
 KH_SSO_ENABLED = getattr(flowsettings, "KH_SSO_ENABLED", False)
@@ -208,3 +212,33 @@ class App(BaseApp):
                 inputs=[],
                 outputs=[self.setup_page_wrapper, self.tabs],
             )
+
+        self.repair_orphan_files()
+
+    def repair_orphan_files(self):
+        """Re-parse, in the background, the files that have no chunks.
+
+        Such files are listed in the index but cannot answer anything, and they are
+        what every "the app cannot read my file" report looked like from outside
+        (MODIFICATIONS §2.7, §2.9). Their rows no longer survive a failed upload
+        (§2.10), but the ones written before that fix are healed here, so fixing a
+        reader is enough — the corpus follows on the next start instead of waiting
+        for someone to press "Force reindex" per file.
+        """
+        if not getattr(flowsettings, "KH_REPAIR_ORPHAN_FILES", True):
+            return
+
+        from ktem.index.file.repair import schedule_repair
+
+        settings = self.default_settings.flatten()
+        for index in self.index_manager.indices:
+            # graph indices rebuild their store through an LLM pipeline; repairing
+            # there costs tokens and is not what this class of bug is about
+            if type(index).__name__ != "FileIndex":
+                continue
+            try:
+                schedule_repair(index, settings)
+            except Exception:  # noqa: BLE001 - a repair must never block the start
+                logger.exception(
+                    "could not schedule the repair of index %s", index.name
+                )

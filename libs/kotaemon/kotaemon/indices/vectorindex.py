@@ -113,6 +113,57 @@ class VectorIndexing(BaseIndexing):
         self.count_ += len(input_)
 
 
+def limit_keyword_only(
+    documents: list["RetrievedDocument"], budget: int
+) -> list["RetrievedDocument"]:
+    """Keep at most ``budget`` keyword-only (score < 0) documents.
+
+    Once the full-text index matched Chinese, keyword hits could fill the whole result
+    list. They carry no similarity (the ``-1`` sentinel), so the refusal gate lost its
+    only signal and answered everything (MODIFICATIONS §5.15). Reserving slots for
+    similarity-ranked documents keeps the gate measurable without dropping the keyword
+    hits that make exact-name lookups work.
+    """
+    budget = max(int(budget), 1)
+    kept: list["RetrievedDocument"] = []
+    keyword_only = 0
+    for document in documents:
+        try:
+            score = float(getattr(document, "score", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            score = 0.0
+        if score < 0:
+            if keyword_only >= budget:
+                continue
+            keyword_only += 1
+        kept.append(document)
+    return kept
+
+
+def similarity_documents_first(
+    documents: list["RetrievedDocument"],
+) -> list["RetrievedDocument"]:
+    """Similarity-scored documents first, keyword-only hits (score < 0) after them.
+
+    A keyword hit has no similarity, so it cannot be compared with a vector match - which
+    is why it was placed in front of the list. Once the full-text index started returning
+    hits for a *scoped* query (MODIFICATIONS §5.19), that order pushed the best chunks out
+    of the context: on the 27-question set the best score fell by 0.2-0.3 for two thirds
+    of the questions and 16 of them were refused, although the answer chunk had been
+    ranked first before. Ordering them last keeps the exact-name safety net (they still
+    fill the slots the similarity ranking left over) without demoting real matches.
+    """
+    scored: list["RetrievedDocument"] = []
+    keyword_only: list["RetrievedDocument"] = []
+    for document in documents:
+        try:
+            score = float(getattr(document, "score", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            score = 0.0
+        (keyword_only if score < 0 else scored).append(document)
+    return scored + keyword_only
+
+
 class VectorRetrieval(BaseRetrieval):
     """Retrieve list of documents from vector store"""
 
@@ -148,11 +199,19 @@ class VectorRetrieval(BaseRetrieval):
 
         do_extend = kwargs.pop("do_extend", False)
         thumbnail_count = kwargs.pop("thumbnail_count", 3)
+        # consumed below; it must not reach the vector store query
+        keyword_slots = kwargs.pop("keyword_slots", None)
+        # Only a handful of keyword hits reach the context, and every candidate is
+        # tokenized by the reranker, so asking the full-text index for hundreds is pure
+        # latency (300 long table rows made one retrieval take 3.2s).
+        docstore_top_k = kwargs.pop("docstore_top_k", None)
 
         if do_extend:
             top_k_first_round = top_k * self.first_round_top_k_mult
         else:
             top_k_first_round = top_k
+        if docstore_top_k is None:
+            docstore_top_k = top_k_first_round
 
         if self.doc_store is None:
             raise ValueError(
@@ -163,10 +222,14 @@ class VectorRetrieval(BaseRetrieval):
         result: list[RetrievedDocument] = []
         # TODO: should declare scope directly in the run params
         scope = kwargs.pop("scope", None)
+        # A caller that runs several queries for the same question (the per-file pass in
+        # ktem's file retriever) can embed the question once and hand the vector over;
+        # embedding again per file doubled the retrieval latency (MODIFICATIONS §5.13).
+        query_embedding = kwargs.pop("query_embedding", None)
         emb: list[float]
 
         if self.retrieval_mode == "vector":
-            emb = self.embedding(text)[0].embedding
+            emb = query_embedding or self.embedding(text)[0].embedding
             _, scores, ids = self.vector_store.query(
                 embedding=emb, top_k=top_k_first_round, doc_ids=scope, **kwargs
             )
@@ -185,7 +248,7 @@ class VectorRetrieval(BaseRetrieval):
             result = [RetrievedDocument(**doc.to_dict(), score=-1.0) for doc in docs]
         elif self.retrieval_mode == "hybrid":
             # similarity search section
-            emb = self.embedding(text)[0].embedding
+            emb = query_embedding or self.embedding(text)[0].embedding
             vs_docs: list[RetrievedDocument] = []
             vs_ids: list[str] = []
             vs_scores: list[float] = []
@@ -212,7 +275,7 @@ class VectorRetrieval(BaseRetrieval):
                 query = text.text if isinstance(text, Document) else text
                 if scope:
                     ds_docs = self.doc_store.query(
-                        query, top_k=top_k_first_round, doc_ids=scope
+                        query, top_k=docstore_top_k, doc_ids=scope
                     )
 
             vs_query_thread = threading.Thread(target=query_vectorstore)
@@ -243,6 +306,21 @@ class VectorRetrieval(BaseRetrieval):
                 if isinstance(reranker, LLMReranking):
                     result = self._filter_docs(result, top_k=top_k)
                 result = reranker.run(documents=result, query=text)
+
+        # keyword-only hits must not crowd out every similarity-scored document, or the
+        # refusal gate has nothing to judge (MODIFICATIONS §5.15). ``keyword_slots`` is
+        # set by the caller, because it asks for more candidates than the context needs.
+        if self.retrieval_mode == "hybrid":
+            budget = (
+                int(keyword_slots)
+                if keyword_slots is not None
+                else max(1, top_k // 2)
+            )
+            result = limit_keyword_only(result, budget)
+            # ... and they must not outrank a real similarity match either (MODIFICATIONS
+            # §5.19). Applied after the reranker, which floats an exact-name chunk up by
+            # coverage and would otherwise re-create the same displacement.
+            result = similarity_documents_first(result)
 
         result = self._filter_docs(result, top_k=top_k)
         print(f"Got raw {len(result)} retrieved documents")

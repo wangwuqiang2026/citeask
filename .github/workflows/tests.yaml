@@ -34,9 +34,24 @@ jobs:
         run: uv sync --frozen --python 3.10 --no-install-package llama-cpp-python
 
       # test_qa.py is not collectable (it imports `index` as a top-level module).
+      # tools/tests covers the evaluation harness and the doctor self-check: those
+      # decide the numbers quoted in the README, so they must not drift unnoticed.
       - name: Run tests
         run: >
           .venv/bin/python -m pytest
           libs/ktem/ktem_tests
           libs/kotaemon/tests/test_ocr_pdf_reader.py
+          libs/kotaemon/tests/test_pptx_reader.py
+          tools/tests
           -q --ignore=libs/ktem/ktem_tests/test_qa.py
+
+      # Only the modules this fork added are worth reporting: whole-repository
+      # coverage sits around 5% because the upstream framework is mostly untouched.
+      # Kept as a report on purpose - the >=80% floor for the three added modules is
+      # still to be confirmed on this runner before it becomes a gate (ROADMAP A2).
+      - name: Coverage of the added modules
+        run: |
+          .venv/bin/python -m coverage run \
+            --source=libs/ktem/ktem/utils,libs/kotaemon/kotaemon/loaders,libs/ktem/ktem/index/file \
+            -m pytest libs/ktem/ktem_tests -q --ignore=libs/ktem/ktem_tests/test_qa.py
+          .venv/bin/python -m coverage report --include="*/i18n.py,*/selector.py,*/ocr_pdf_loader.py,*/repair.py"

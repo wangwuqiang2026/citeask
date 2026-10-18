@@ -19,6 +19,18 @@ from ktem.db.models import engine
 from ktem.embeddings.manager import embedding_models_manager
 from ktem.llms.manager import llms
 from ktem.rerankings.manager import reranking_models_manager
+from ktem.index.file.routing import (
+    add_entity_files,
+    build_file_profile,
+    entity_evidence_files,
+    profile_cache_key,
+    rank_files,
+)
+from ktem.utils.retrieval import (
+    absent_source_ids,
+    diversify_by_source,
+    source_key,
+)
 from llama_index.core.readers.base import BaseReader
 from llama_index.core.readers.file.base import default_file_metadata_func
 from llama_index.core.vector_stores import (
@@ -28,7 +40,7 @@ from llama_index.core.vector_stores import (
     MetadataFilters,
 )
 from llama_index.core.vector_stores.types import VectorStoreQueryMode
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 from theflow.settings import settings
 from theflow.utils.modules import import_dotted_string
@@ -47,6 +59,7 @@ from kotaemon.indices.ingests.files import (
     web_reader,
 )
 from kotaemon.indices.rankings import BaseReranking, LLMReranking, LLMTrulensScoring
+from kotaemon.rerankings.resolve import resolve_reranker
 from kotaemon.indices.splitters import BaseSplitter, TokenSplitter
 
 from .base import BaseFileIndexIndexing, BaseFileIndexRetriever
@@ -77,6 +90,25 @@ def dev_settings():
 
 
 _default_token_func = tiktoken.encoding_for_model("gpt-3.5-turbo").encode
+
+#: Embeddings of the stored file profiles, keyed by file id + profile hash, so routing
+#: costs one embedding per file per process instead of one per question (§5.14).
+_PROFILE_VECTORS: dict[str, list[float]] = {}
+_PROFILE_LOCK = threading.Lock()
+
+
+def stored_file_name(content_hash: str, suffix: str) -> str:
+    """Name the stored copy ``<hash><suffix>``.
+
+    The copy used to be stored under the bare hash, which meant the only path a
+    chunk's metadata could point at was the *working* copy (the upload cache, or the
+    ``*_src`` directory of a rebuild) — and that directory is deleted afterwards, so
+    the citation panel's "preview" link pointed at a file that no longer existed.
+    Keeping the extension makes the stored copy usable directly (the PDF viewer picks
+    the type from it) without storing a second copy.
+    """
+    cleaned = "".join(ch for ch in str(suffix or "") if ch not in "\\/")
+    return f"{content_hash}{cleaned.lower()}"
 
 
 class DocumentRetrievalPipeline(BaseFileIndexRetriever):
@@ -143,6 +175,24 @@ class DocumentRetrievalPipeline(BaseFileIndexRetriever):
             logger.info(f"Skip retrieval because of no selected files: {self}")
             return []
 
+        # Embed the question once: file routing and the per-file pass both need it, and
+        # it is the expensive part of a retrieval (MODIFICATIONS §5.13/§5.14).
+        route_enabled = len(doc_ids) > 1 and bool(
+            getattr(settings, "KH_FILE_ROUTING", True)
+        )
+        per_file_enabled = len(doc_ids) > 1 and bool(
+            getattr(settings, "KH_RETRIEVAL_PER_FILE", True)
+        )
+        query_embedding = (
+            self._query_embedding(text) if (route_enabled or per_file_enabled) else None
+        )
+
+        if route_enabled and query_embedding is not None:
+            routed = self._route_files(query_embedding, doc_ids, text)
+            if routed:
+                print(f"file routing: {len(doc_ids)} -> {len(routed)} files")
+                doc_ids = routed
+
         retrieval_kwargs: dict = {}
         with Session(engine) as session:
             stmt = select(self.Index).where(
@@ -155,6 +205,14 @@ class DocumentRetrievalPipeline(BaseFileIndexRetriever):
         # do first round top_k extension
         retrieval_kwargs["do_extend"] = True
         retrieval_kwargs["scope"] = chunk_ids
+        # keyword (full-text) hits carry no similarity, so they may fill at most half of
+        # the context; otherwise the refusal gate has nothing to judge (§5.15)
+        retrieval_kwargs["keyword_slots"] = max(1, self.top_k // 2)
+        # ask the full-text index for a few times what can reach the context, not
+        # hundreds: every candidate costs a rerank tokenization pass
+        retrieval_kwargs["docstore_top_k"] = max(
+            20, retrieval_kwargs["keyword_slots"] * 4
+        )
         retrieval_kwargs["filters"] = MetadataFilters(
             filters=[
                 MetadataFilter(
@@ -174,8 +232,30 @@ class DocumentRetrievalPipeline(BaseFileIndexRetriever):
         # rerank
         s_time = time.time()
         print(f"retrieval_kwargs: {retrieval_kwargs.keys()}")
-        docs = self.vector_retrieval(text=text, top_k=self.top_k, **retrieval_kwargs)
+
+        # Ask for more candidates than the context needs, then take the best chunk of
+        # every file before the second chunk of any file: a single large spreadsheet
+        # otherwise takes every slot, even when a small table holds the answer
+        # (MODIFICATIONS §5.13).
+        per_file = per_file_enabled and len(doc_ids) > 1
+        candidate_k = self.top_k
+        if per_file:
+            multiplier = int(getattr(settings, "KH_RETRIEVAL_CANDIDATES", 3) or 3)
+            candidate_k = max(self.top_k, self.top_k * max(multiplier, 1))
+            if query_embedding is not None:
+                retrieval_kwargs["query_embedding"] = query_embedding
+
+        docs = self.vector_retrieval(text=text, top_k=candidate_k, **retrieval_kwargs)
         print("retrieval step took", time.time() - s_time)
+
+        if per_file:
+            docs = self._fill_absent_sources(text, docs, doc_ids, retrieval_kwargs)
+            docs = diversify_by_source(docs, self.top_k)
+            print(
+                "per-file retrieval: {} chunks from {} files".format(
+                    len(docs), len({source_key(doc) for doc in docs})
+                )
+            )
 
         if not self.get_extra_table:
             return docs
@@ -211,6 +291,269 @@ class DocumentRetrievalPipeline(BaseFileIndexRetriever):
                 print("Error retrieving additional tables")
 
         return docs
+
+    def _query_embedding(self, text: str) -> Optional[list[float]]:
+        """Embed the question once, or ``None`` when that fails."""
+        try:
+            return self.embedding(text)[0].embedding
+        except Exception as exc:  # noqa: BLE001 - fall back to embedding per query
+            logger.warning("could not precompute the query embedding: %s", exc)
+            return None
+
+    def _file_profiles(self, file_ids: list[str]) -> dict[str, str]:
+        """Stored "what is this file about" profiles, keyed by file id.
+
+        Files indexed before routing existed have no profile yet; they are described on
+        first use and the result is written back, so no reindex is needed.
+        """
+        profiles: dict[str, str] = {}
+        try:
+            with Session(engine) as session:
+                stmt = select(self.Source.id, self.Source.note).where(
+                    self.Source.id.in_(file_ids)
+                )
+                for file_id, note in session.execute(stmt):
+                    summary = (
+                        (note or {}).get("summary") if isinstance(note, dict) else None
+                    )
+                    if summary:
+                        profiles[str(file_id)] = summary
+        except Exception as exc:  # routing is an optimisation, never a hard dependency
+            logger.warning("could not read the file profiles: %s", exc)
+            return profiles
+
+        missing = [str(file_id) for file_id in file_ids if str(file_id) not in profiles]
+        if missing:
+            profiles.update(self._describe_files(missing))
+        return profiles
+
+    def _describe_files(self, file_ids: list[str]) -> dict[str, str]:
+        """Build the profile of files that do not have one yet, and store it."""
+        built: dict[str, str] = {}
+        for file_id in file_ids:
+            try:
+                with Session(engine) as session:
+                    source_stmt = select(self.Source).where(self.Source.id == file_id)
+                    source_row = session.execute(source_stmt).first()
+                    if not source_row:
+                        continue
+                    source = source_row[0]
+
+                    chunk_stmt = select(self.Index.target_id).where(
+                        self.Index.source_id == file_id,
+                        self.Index.relation_type == "document",
+                    )
+                    targets = [row[0] for row in session.execute(chunk_stmt)]
+                    if not targets:
+                        continue
+                    middle = len(targets) // 2
+                    sample = list(
+                        dict.fromkeys(
+                            [targets[0], targets[middle], targets[-1]]
+                        )
+                    )
+                    documents = self.DS.get(sample)
+                    profile_text = build_file_profile(
+                        source.name,
+                        (getattr(doc, "text", "") or "" for doc in documents),
+                    )
+
+                    note = dict(source.note or {})
+                    note["summary"] = profile_text[:2000]
+                    source.note = note
+                    session.add(source)
+                    session.commit()
+                built[file_id] = profile_text
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("could not describe %s: %s", file_id, exc)
+        return built
+
+    def _profile_vectors(self, profiles: dict[str, str]) -> dict[str, list[float]]:
+        """Embed the profiles once per process (a changed profile re-embeds)."""
+        vectors: dict[str, list[float]] = {}
+        pending: dict[str, tuple[str, str]] = {}
+        for file_id, summary in profiles.items():
+            key = profile_cache_key(file_id, summary)
+            with _PROFILE_LOCK:
+                cached = _PROFILE_VECTORS.get(key)
+            if cached is not None:
+                vectors[file_id] = cached
+            else:
+                pending[file_id] = (key, summary)
+
+        if not pending:
+            return vectors
+
+        try:
+            embedded = self.embedding([summary for _, summary in pending.values()])
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("could not embed the file profiles: %s", exc)
+            return vectors
+
+        for (file_id, (key, _)), document in zip(pending.items(), embedded):
+            vector = list(getattr(document, "embedding", None) or [])
+            if not vector:
+                continue
+            vectors[file_id] = vector
+            with _PROFILE_LOCK:
+                _PROFILE_VECTORS[key] = vector
+        return vectors
+
+    def _route_files(
+        self,
+        question_vector: list[float],
+        file_ids: list[str],
+        question: str = "",
+    ) -> Optional[list[str]]:
+        """The files worth searching for this question, or ``None`` to search all.
+
+        Profile similarity decides *what a file is about*, which misses the file that
+        merely *contains* the queried entity: a grades spreadsheet's profile is a wall of
+        numbers, so a question asking about one student's result scored 0.44 against the
+        table while the scholarship notice scored 0.63 and the 0.80 relative cut dropped
+        the table (MODIFICATIONS §5.20). Files whose full-text hits name the entity in a
+        table are therefore added back into the scope.
+        """
+        profiles = self._file_profiles(file_ids)
+        if len(profiles) < 2:
+            return None
+        vectors = self._profile_vectors(profiles)
+        if len(vectors) < 2:
+            return None
+
+        ranked = rank_files(
+            question_vector,
+            vectors,
+            top_m=int(getattr(settings, "KH_FILE_ROUTING_TOP_M", 3) or 3),
+            min_similarity=float(
+                getattr(settings, "KH_FILE_ROUTING_MIN_SIMILARITY", 0.30) or 0.0
+            ),
+            min_ratio=float(
+                getattr(settings, "KH_FILE_ROUTING_MIN_RATIO", 0.80) or 0.0
+            ),
+        )
+        if not ranked or len(ranked) >= len(file_ids):
+            return None
+
+        extra = self._entity_files(question, file_ids) if question else []
+        if not extra:
+            return ranked
+
+        merged = add_entity_files(
+            ranked,
+            extra,
+            max_files=int(getattr(settings, "KH_RETRIEVAL_MAX_FILES", 8) or 8),
+        )
+        if len(merged) > len(ranked):
+            print(
+                "file routing: +{} file(s) whose table names the entity "
+                "({} -> {})".format(len(merged) - len(ranked), len(ranked), len(merged))
+            )
+        return merged
+
+    def _entity_files(self, question: str, file_ids: list[str]) -> list[str]:
+        """Files in ``file_ids`` whose chunks name the question's entity in a table.
+
+        One full-text query over the whole index (the hits are filtered back to the
+        selection, so this never searches a file the user did not pick), then the same
+        "entity term inside a table row/cell" test the refusal gate uses. Cheap: the
+        full-text index answers in milliseconds and no embedding is computed.
+        """
+        limit = int(getattr(settings, "KH_ROUTING_ENTITY_FILES", 2) or 0)
+        if limit <= 0:
+            return []
+        candidates = int(getattr(settings, "KH_ROUTING_ENTITY_CANDIDATES", 30) or 30)
+        try:
+            hits = self.DS.query(question, top_k=candidates)
+        except Exception as exc:  # noqa: BLE001 - routing is an optimisation, never a hard dependency
+            logger.warning("could not look up the entity in the full-text index: %s", exc)
+            return []
+
+        pairs = [
+            ((doc.metadata or {}).get("file_id"), doc.text or "") for doc in hits
+        ]
+        found = entity_evidence_files(question, pairs, file_ids, max_files=limit)
+        return [file_id for file_id in found if self._is_small_file(file_id)]
+
+    def _is_small_file(self, file_id: str) -> bool:
+        """Whether a file is small enough to add to the search scope.
+
+        A 10k-chunk spreadsheet added to the scope dominates the candidate list and
+        displaces the file that answers the question, even when one of its rows holds the
+        entity (MODIFICATIONS §5.13) — measured: adding the civil-service spreadsheet for
+        "理论考试90分以上加几分" pushed the points document out of 9 of 10 slots and lost
+        the key fact. Entity routing is a *row lookup*, so it only applies to tables of a
+        bounded size; ``KH_ROUTING_ENTITY_MAX_CHUNKS=0`` lifts the bound.
+        """
+        max_chunks = int(getattr(settings, "KH_ROUTING_ENTITY_MAX_CHUNKS", 500) or 0)
+        if max_chunks <= 0:
+            return True
+        try:
+            with Session(engine) as session:
+                stmt = (
+                    select(func.count())
+                    .select_from(self.Index)
+                    .where(
+                        self.Index.relation_type == "document",
+                        self.Index.source_id == file_id,
+                    )
+                )
+                count = session.execute(stmt).scalar() or 0
+        except Exception as exc:  # noqa: BLE001 - never let a size check break retrieval
+            logger.warning("could not size file %s: %s", file_id, exc)
+            return True
+        return int(count) <= max_chunks
+
+    def _fill_absent_sources(
+        self,
+        text: str,
+        docs: list[RetrievedDocument],
+        doc_ids: list[str],
+        retrieval_kwargs: dict,
+    ) -> list[RetrievedDocument]:
+        """Query the files the global ranking left out of the context entirely.
+
+        A dense table scores ~0.34 while a large spreadsheet contributes hundreds of
+        chunks at ~0.335, so the table can be missing from a top-30 list even though it
+        holds the answer. One query per absent file guarantees it a slot; the cost is an
+        embedding call per file, bounded by ``KH_RETRIEVAL_MAX_FILES``.
+        """
+        absent = absent_source_ids(docs, doc_ids)
+        if not absent:
+            return docs
+
+        max_files = int(getattr(settings, "KH_RETRIEVAL_MAX_FILES", 8) or 8)
+        per_file_k = int(getattr(settings, "KH_RETRIEVAL_PER_FILE_K", 3) or 3)
+        extra: list[RetrievedDocument] = []
+        for file_id in absent[:max_files]:
+            filters = MetadataFilters(
+                filters=[
+                    MetadataFilter(
+                        key="file_id",
+                        value=[file_id],
+                        operator=FilterOperator.IN,
+                    )
+                ],
+                condition=FilterCondition.OR,
+            )
+            try:
+                extra.extend(
+                    self.vector_retrieval(
+                        text=text,
+                        top_k=per_file_k,
+                        **{**retrieval_kwargs, "filters": filters},
+                    )
+                )
+            except Exception as exc:  # a failed extra query must not break the answer
+                logger.warning("per-file retrieval failed for %s: %s", file_id, exc)
+
+        if not extra:
+            return docs
+        merged = list(docs) + list(extra)
+        merged.sort(
+            key=lambda doc: float(getattr(doc, "score", 0.0) or 0.0), reverse=True
+        )
+        return merged
 
     def generate_relevant_scores(
         self, query: str, documents: list[RetrievedDocument]
@@ -273,7 +616,13 @@ class DocumentRetrievalPipeline(BaseFileIndexRetriever):
             },
             "use_llm_reranking": {
                 "name": "Use LLM relevant scoring",
-                "value": not config("USE_LOW_LLM_REQUESTS", default=False, cast=bool),
+                # Measured cost (MODIFICATIONS §5.10): one extra LLM call per
+                # retrieved chunk — 11 calls / 9043 tokens per answer versus 1 call /
+                # 3291 tokens with it off (+175% tokens, +15% P50). It only orders the
+                # evidence panel and feeds the low-relevance warning, so it is off by
+                # default; set USE_LOW_LLM_REQUESTS=False in .env (or tick the box) to
+                # turn it back on.
+                "value": config("USE_LLM_RERANKING", default=False, cast=bool),
                 "choices": [True, False],
                 "component": "checkbox",
             },
@@ -300,12 +649,16 @@ class DocumentRetrievalPipeline(BaseFileIndexRetriever):
             ],
             retrieval_mode=user_settings["retrieval_mode"],
             llm_scorer=(LLMTrulensScoring() if use_llm_reranking else None),
+            # a configured-but-unusable reranker (e.g. Cohere without a key) used to
+            # return the list unchanged while the UI said reranking was on; fall back
+            # to the local lexical reranker instead (MODIFICATIONS §5.9)
             rerankers=[
-                reranking_models_manager[
+                resolve_reranker(
                     index_settings.get(
                         "reranking", reranking_models_manager.get_default_name()
-                    )
-                ]
+                    ),
+                    lambda name: reranking_models_manager.get(name),
+                )
             ],
         )
         if not user_settings["use_reranking"]:
@@ -524,10 +877,11 @@ class IndexPipeline(BaseComponent):
         with file_path.open("rb") as fi:
             file_hash = sha256(fi.read()).hexdigest()
 
-        shutil.copy(file_path, self.FSPath / file_hash)
+        stored_name = stored_file_name(file_hash, file_path.suffix)
+        shutil.copy(file_path, self.FSPath / stored_name)
         source = self.Source(
             name=file_path.name,
-            path=file_hash,
+            path=stored_name,
             size=file_path.stat().st_size,
             user=self.user_id,  # type: ignore
         )
@@ -538,7 +892,26 @@ class IndexPipeline(BaseComponent):
 
         return file_id
 
-    def finish(self, file_id: str, file_path: str | Path) -> str:
+    def stored_path_of(self, file_id: str) -> Optional[Path]:
+        """Absolute path of the stored copy of a file (``None`` when unknown)."""
+        try:
+            with Session(engine) as session:
+                row = session.execute(
+                    select(self.Source.path).where(self.Source.id == file_id)
+                ).first()
+        except Exception:  # noqa: BLE001 - a missing row is not an error here
+            return None
+        if not row or not row[0]:
+            return None
+        fs_path = getattr(self, "FSPath", None)
+        return Path(fs_path) / row[0] if fs_path else Path(row[0])
+
+    def finish(
+        self,
+        file_id: str,
+        file_path: str | Path,
+        profile_text: str | None = None,
+    ) -> str:
         """Finish the indexing"""
         with Session(engine) as session:
             stmt = select(self.Source).where(self.Source.id == file_id)
@@ -561,6 +934,10 @@ class IndexPipeline(BaseComponent):
 
             # populate the note
             item.note["loader"] = self.get_from_path("loader").__class__.__name__
+            if profile_text:
+                # what this file is about, so a question can be routed to it without
+                # searching every file (MODIFICATIONS §5.14)
+                item.note["summary"] = profile_text[:2000]
 
             session.add(item)
             session.commit()
@@ -571,15 +948,17 @@ class IndexPipeline(BaseComponent):
         """Get the token function for calculating the number of tokens"""
         return _default_token_func
 
-    def delete_file(self, file_id: str):
-        """Delete a file from the db, including its chunks in docstore and vectorstore
+    def delete_chunks(self, file_id: str) -> None:
+        """Delete the chunks of a source, keeping the source row itself.
 
-        Args:
-            file_id: the file id
+        Indexing writes the document store first and the vectors afterwards, so a
+        run that fails while embedding leaves documents with no vectors: the file is
+        listed, cannot be retrieved, and a retry would duplicate every chunk. Used
+        by the failure path (``_handle_failed_indexing``) when the source row has to
+        stay.
         """
+        vs_ids, ds_ids = [], []
         with Session(engine) as session:
-            session.execute(delete(self.Source).where(self.Source.id == file_id))
-            vs_ids, ds_ids = [], []
             index = session.execute(
                 select(self.Index).where(self.Index.source_id == file_id)
             ).all()
@@ -596,19 +975,63 @@ class IndexPipeline(BaseComponent):
         if ds_ids:
             self.DS.delete(ds_ids)
 
+    def delete_file(self, file_id: str):
+        """Delete a file from the db, including its chunks in docstore and vectorstore
+
+        Args:
+            file_id: the file id
+        """
+        stored_path: Optional[str] = None
+        with Session(engine) as session:
+            row = session.execute(
+                select(self.Source.path).where(self.Source.id == file_id)
+            ).first()
+            stored_path = row[0] if row else None
+            session.execute(delete(self.Source).where(self.Source.id == file_id))
+            session.commit()
+
+        self.delete_chunks(file_id)
+
+        # the stored copy holds the upload under its content hash; without this the
+        # bytes of every deleted (and every failed, see `stream`) file stay on disk
+        fs_path = getattr(self, "FSPath", None)
+        if stored_path and fs_path:
+            try:
+                (Path(fs_path) / stored_path).unlink(missing_ok=True)
+            except OSError as exc:  # a read-only store must not fail the deletion
+                logger.warning("could not remove stored file %s: %s", stored_path, exc)
+
     def run(
         self, file_path: str | Path, reindex: bool, **kwargs
     ) -> tuple[str, list[Document]]:
         raise NotImplementedError
 
     def stream(
-        self, file_path: str | Path, reindex: bool, **kwargs
+        self,
+        file_path: str | Path,
+        reindex: bool,
+        keep_on_failure: bool = False,
+        **kwargs,
     ) -> Generator[Document, None, tuple[str, list[Document]]]:
+        """Parse and index one file, yielding progress documents.
+
+        Args:
+            file_path: the file (or URL) to index
+            reindex: re-parse a file that is already in the index
+            keep_on_failure: leave the source row in place when parsing fails. Used
+                by the startup repair (``ktem.index.file.repair``), which has to work
+                on an existing row and must not delete the user's upload when the
+                retry fails as well.
+        """
         # check if the file is already indexed
         if isinstance(file_path, Path):
             file_path = file_path.resolve()
 
         file_id = self.get_id_if_exists(file_path)
+        #: whether this attempt is the one that created the source row. Only such a
+        #: row is removed on failure: a row that was already in the index belongs to
+        #: an earlier, successful upload and must never be dropped by a retry.
+        created_here = False
 
         if isinstance(file_path, Path):
             if file_id is not None:
@@ -624,15 +1047,18 @@ class IndexPipeline(BaseComponent):
                     )
                     self.delete_file(file_id)
                     file_id = self.store_file(file_path)
+                    created_here = True
             else:
                 # add record to db
                 file_id = self.store_file(file_path)
+                created_here = True
         else:
             if file_id is not None:
                 raise ValueError(f"URL {file_path} already indexed.")
             else:
                 # add record to db
                 file_id = self.store_url(file_path)
+                created_here = True
 
         # extract the file
         if isinstance(file_path, Path):
@@ -644,16 +1070,83 @@ class IndexPipeline(BaseComponent):
 
         extra_info["file_id"] = file_id
         extra_info["collection_name"] = self.collection_name
+        # point the citation preview at the *stored* copy: the working path (upload
+        # cache, or a rebuild's *_src directory) is deleted afterwards (MODIFICATIONS
+        # §5.12). The stored copy keeps the extension so the PDF viewer accepts it.
+        stored_path = self.stored_path_of(file_id)
+        if stored_path is not None:
+            extra_info["file_path"] = str(stored_path)
 
-        yield Document(f" => Converting {file_name} to text", channel="debug")
-        docs = self.loader.load_data(file_path, extra_info=extra_info)
-        yield Document(f" => Converted {file_name} to text", channel="debug")
-        yield from self.handle_docs(docs, file_id, file_name)
+        try:
+            yield Document(f" => Converting {file_name} to text", channel="debug")
+            docs = self.loader.load_data(file_path, extra_info=extra_info)
+            yield Document(f" => Converted {file_name} to text", channel="debug")
+            # what this file is about: kept on the source row so later questions can be
+            # routed to the relevant files instead of searching all of them (§5.14)
+            profile_text = build_file_profile(
+                file_name, (getattr(doc, "text", "") or "" for doc in docs)
+            )
+            yield from self.handle_docs(docs, file_id, file_name)
 
-        self.finish(file_id, file_path)
+            self.finish(file_id, file_path, profile_text=profile_text)
+        except Exception as exc:
+            self._handle_failed_indexing(
+                file_id=file_id,
+                file_path=file_path,
+                file_name=file_name,
+                error=exc,
+                created_here=created_here,
+                keep_on_failure=keep_on_failure,
+            )
+            raise
 
         yield Document(f" => Finished indexing {file_name}", channel="debug")
         return file_id, docs
+
+    def _handle_failed_indexing(
+        self,
+        *,
+        file_id: str,
+        file_path: str | Path,
+        file_name: str,
+        error: Exception,
+        created_here: bool,
+        keep_on_failure: bool,
+    ) -> None:
+        """Leave no half-indexed file behind when parsing fails.
+
+        A source row whose chunks never got written used to survive the failure: the
+        file list showed it as an indexed file, every question about it answered
+        "No evidence found", and uploading it again came back as "already indexed".
+        That is how a missing reader dependency (e.g. ``xlrd`` for ``.xls``, see
+        MODIFICATIONS §2.9) felt like "the app cannot read my file" with no way out.
+
+        Two shapes of a failed run are handled here:
+
+        - an upload that failed: the row this attempt created is removed, so the
+          user can simply upload the file again once the cause is fixed, and the
+          error stays what they see (the caller streams it as a ``status: failed``
+          event on the ``index`` channel);
+        - a repair retry that failed (``keep_on_failure``): the source row is the
+          user's upload and stays, but the chunks written before the failure are
+          dropped — indexing stores documents first and vectors last, so keeping
+          them would leave a file with 10k documents and no vectors, and the next
+          retry would write all of them again.
+        """
+        logger.error(
+            "indexing %s failed (%s): %s", file_name, type(error).__name__, error
+        )
+        if not created_here:
+            return
+        try:
+            if keep_on_failure:
+                self.delete_chunks(file_id)
+                logger.info("dropped the partial chunks of %s", file_name)
+            else:
+                self.delete_file(file_id)
+                logger.info("removed the half-indexed row of %s", file_name)
+        except Exception:  # noqa: BLE001 - the cleanup must not mask the real error
+            logger.exception("could not clean up the failed indexing of %s", file_name)
 
 
 class IndexDocumentPipeline(BaseFileIndexIndexing):

@@ -6,6 +6,31 @@
 为什么要单独有这套东西：项目的每一次优化都必须能回答"哪个指标变了、变了多少"。
 没有这套尺子，改动就只是主观判断（见 `ROADMAP.md` §3.3）。
 
+## 先用自带示例语料跑一遍（新 clone 的可复现路径）
+
+仓库提交了一份**虚构内容**的 5 页语料 `fixtures/points-fixture.pptx` 和配套的 9 题
+`fixture-points.json`（含 1 道无答案题），不依赖任何私有文件：
+
+```powershell
+# 1) 语料已随仓库提交；需要重新生成时（内容确定性、不联网）
+.\.venv\Scripts\python.exe tools\eval\make_fixture.py
+
+# 2) 把 fixtures/points-fixture.pptx 上传进「文件集合」，等索引完成（需要向量化：
+#    默认通义 text-embedding-v3；离线可用本地 FastEmbed，首次要下模型）
+
+# 3) 跑配套题集（应用需停止，二者共用 sqlite / LanceDB）
+.\.venv\Scripts\python.exe -X utf8 tools\eval_retrieval.py --eval tools\eval\fixture-points.json
+```
+
+这一步验证的是**评测链路通不通**（语料入库 → 检索 → Hit@k / 拒答统计），
+数字本身取决于你用哪个向量模型——`fixture-points.json` 的注释里写了这一点。
+题集与语料的一致性有单测兜底：`tools/tests/test_fixture_eval.py` 会检查每个
+`expect_pages` 在语料里存在、每个 `expect_terms` 真的出现在对应页、无答案题的词真的
+不在语料里——所以题目不会悄悄和语料脱节。
+
+真实语料上的指标见下文；那份语料是私有的（含个人信息），仓库只保留脱敏后的题集，
+用 `--corpus "你的文件"` 指向自己的语料即可复现。
+
 ## 命令
 
 ```powershell

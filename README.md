@@ -17,11 +17,12 @@
 | 修复**检索静默失效**：默认配置下召回恒为空，模型绕过文档凭记忆作答 | 同一条默认路径：修复前召回 0 条 → 修复后正确命中并带引用（[§2.5](MODIFICATIONS.md#25-验证证据)） |
 | 新增**扫描件 OCR 检索链路**：文字层只有标题时按页 OCR 后再入库 | 同一份 PDF 正文从 **209 字符 → 2322 字符**，问题「英语四六级加几分」得到「四级 +4 分 / 六级 +6 分」并引用 `[第 2 页]`（[§2.7](MODIFICATIONS.md#27-同类缺陷二扫描版-pdf-的正文根本没进索引)） |
 | 上游**无 i18n 机制**下做中文界面：译文不落源码 | **336** 条词条、**296** 处标签本地化，剩余 18 条为刻意保留的品牌/标识符（[§3](MODIFICATIONS.md#三界面汉化引入翻译库译文不入代码)） |
-| 建立**检索评测**（只跑检索层，零 token 成本） | 27 条问题、Hit@1 **59.3%** / MRR **0.702**（[评测](#检索评测)） |
+| 建立**检索评测**（只跑检索层，零 token 成本） | 27 条问题 + 12 条无答案题；同一套题把 Hit@1 从基线 **59.3%** 做到 **88.9%**（单文件口径）、MRR 0.702 → **0.933**（[评测](#检索评测)） |
+| 让评测**在干净环境可复现** | 仓库自带 5 页示例语料 + 9 题配套题集，配套单测保证"题目引用的页/事实"真的在那份语料里（`tools/tests/test_fixture_eval.py`） |
 | 向量模型**用评测选型**，而不是凭感觉 | 4 个候选模型横向对比，Hit@1 从 **36.7% → 60.0%**（30 题版本实测） |
 | 向量化可切换：**通义 API（默认）** 或 **本地 ONNX**（离线兜底） | 通义与本地 mpnet 指标相当（Hit@1 均 60.0%，30 题版本），前者省掉 1 GB 本地模型 |
 
-自动化测试 **88 个用例**全绿，全部离线运行（不联网、不调用模型）。
+自动化测试 **225 个用例**全绿，全部离线运行（不联网、不调用模型）；CI 每次 push 都会跑一遍。
 
 ---
 
@@ -90,10 +91,24 @@ Gradio 4.39 没有 `gr.I18n`，界面文案散落在 20 多个文件里。做法
 
 评测只跑**检索层**：不调用任何模型，因此零 token 成本，换模型/换切块/换重排都能直接量化对比。
 
+**新 clone 先用自带示例语料复现一次**（不依赖任何私有文件）：
+
+```powershell
+# 语料是 5 页 PPTX（虚构内容），已随仓库提交；也可以用 tools/eval/make_fixture.py 重新生成
+# 1) 把它上传进「文件集合」并等索引完成（需要向量化：通义 text-embedding-v3 或本地 FastEmbed）
+# 2) 跑配套的 9 题（含 1 道无答案题）
+.\.venv\Scripts\python.exe tools\eval_retrieval.py --eval tools\eval\fixture-points.json
+```
+
+评测集与语料的一致性有单测兜底（`tools/tests/test_fixture_eval.py`：题目引用的页码必须存在、
+每个关键事实必须真的出现在那份语料里），所以「题目跑出来的数字」不会因为语料被改而悄悄漂移。
+
+在**自己的语料**上评测（27 条问题；切块 512/64，默认重排）：
+
 ```powershell
 # 先把语料上传进「文件集合」，然后（应用需停止，二者共用 sqlite / LanceDB）
 .\.venv\Scripts\python.exe tools\eval_retrieval.py --eval tools\eval\zh-points-rules.json `
-    --out tools\eval\results.md --json tools\eval\results.json
+    --corpus "你的语料.pdf" --out tools\eval\results.md --json tools\eval\results.json
 ```
 
 当前基线（27 条问题；切块 **512/64**，默认重排）：
@@ -401,12 +416,15 @@ Copy-Item .env.example .env
 （`kotaemon/tests/test_embedding_batching.py`）、拒答闸门（`ktem_tests/test_abstain_gate.py`：
 关键词哨兵不误拒、阈值边界、审计日志写失败不影响作答）、本地重排与回退
 （`ktem_tests/test_local_reranker.py`）、`.pptx` 本地读取器（`kotaemon/tests/test_pptx_reader.py`）、
-查询 trace 与用量计数（`tools/tests/test_trace.py`）、评测打分与自检判定（`tools/tests/`）。
+查询 trace 与用量计数（`tools/tests/test_trace.py`）、评测打分与自检判定（`tools/tests/`）、
+按文件路由与实体证据（`ktem_tests/test_file_routing.py`）、示例语料与题集的一致性
+（`tools/tests/test_fixture_eval.py`）。
 
-新增模块的本地覆盖率（`coverage run -m pytest … && coverage report`）：
-`selector.py` 100% · `abstain.py` 100% · `llms/usage.py` 100% · `utils/trace.py` 98% ·
-`rerankings/local_lexical.py` 96% · `loaders/pptx_loader.py` 88% · `index/file/repair.py` 78%；
-`i18n.py` 与 `ocr_pdf_loader.py` 的用例依赖 pytest 临时目录，需在 CI（Linux）上统计。
+新增模块的本地覆盖率（`coverage run -m pytest … && coverage report`，实测 225 个用例）：
+`abstain.py` 100% · `selector.py` 100% · `routing.py` 100% · `file_profile.py` 100% ·
+`llms/usage.py` 100% · `utils/trace.py` 98% · `rerankings/local_lexical.py` 98% ·
+`loaders/pptx_loader.py` 82% · `index/file/repair.py` 80%；`i18n.py` 与 `ocr_pdf_loader.py`
+的用例依赖 pytest 临时目录，需在 CI（Linux）上统计。
 
 ---
 
@@ -426,6 +444,7 @@ README 里出现的每个数字都能用一条命令复现；"未测"就是未�
 | 词表 336 条 | `python -m ktem.utils.i18n stats --language zh` | 终端输出 |
 | 正文 209 → 2322 字符（扫描件 OCR） | `python tools/reindex_corpus.py --match "积分细则"` 后查 `Source.note` | `ktem_app_data/user_data/sql.db` |
 | 测试通过数 | 上面「测试」一节的 pytest 命令 | 终端 / `.github/workflows/tests.yaml`（CI） |
+| 示例语料上的评测可跑通 | 上传 `tools/eval/fixtures/points-fixture.pptx` → `python -X utf8 tools/eval_retrieval.py --eval tools/eval/fixture-points.json` | 终端输出（数字取决于你的向量模型）；一致性由 `tools/tests/test_fixture_eval.py` 守住 |
 
 > `tools/doctor.py` 的输出包含本机语料文件名，**不要把它提交进仓库**；
 > 需要留档时写到仓库外，或先脱敏。

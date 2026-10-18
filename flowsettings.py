@@ -16,7 +16,7 @@ this_dir = Path(this_file).parent
 # change this if your app use a different name
 KH_PACKAGE_NAME = "kotaemon_app"
 # Display name shown in the window title, sidebar and login/help pages.
-KH_APP_NAME = config("KH_APP_NAME", default="引问")
+KH_APP_NAME = config("KH_APP_NAME", default="citeask")
 
 KH_APP_VERSION = config("KH_APP_VERSION", None)
 if not KH_APP_VERSION:

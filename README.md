@@ -1,4 +1,4 @@
-# 引问 · CiteAsk
+# citeask
 
 [![tests](https://github.com/wangwuqiang2026/citeask/actions/workflows/tests.yaml/badge.svg)](https://github.com/wangwuqiang2026/citeask/actions/workflows/tests.yaml)
 

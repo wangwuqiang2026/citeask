@@ -4,9 +4,13 @@ from theflow.settings import settings as flowsettings
 
 KH_APP_DATA_DIR = getattr(flowsettings, "KH_APP_DATA_DIR", ".")
 KH_GRADIO_SHARE = getattr(flowsettings, "KH_GRADIO_SHARE", False)
+KH_OPEN_BROWSER_ON_START = getattr(flowsettings, "KH_OPEN_BROWSER_ON_START", True)
 KH_UI_LANGUAGE = getattr(flowsettings, "KH_UI_LANGUAGE", "en")
 KH_UI_TRANSLATOR = getattr(flowsettings, "KH_UI_TRANSLATOR", "mymemory")
 KH_UI_TRANSLATE_MISSING = getattr(flowsettings, "KH_UI_TRANSLATE_MISSING", False)
+# The stored uploads: the citation preview links point at the copy kept here, so the
+# `/file=` route has to be allowed to serve this directory (MODIFICATIONS §5.12).
+KH_FILESTORAGE_PATH = getattr(flowsettings, "KH_FILESTORAGE_PATH", "")
 GRADIO_TEMP_DIR = os.getenv("GRADIO_TEMP_DIR", None)
 # override GRADIO_TEMP_DIR if it's not set
 if GRADIO_TEMP_DIR is None:
@@ -74,10 +78,11 @@ if USE_I18N:
 
 demo.queue().launch(
     favicon_path=app._favicon,
-    inbrowser=True,
+    inbrowser=KH_OPEN_BROWSER_ON_START,
     allowed_paths=[
         "libs/ktem/ktem/assets",
         GRADIO_TEMP_DIR,
+        *([KH_FILESTORAGE_PATH] if KH_FILESTORAGE_PATH else []),
     ],
     share=KH_GRADIO_SHARE,
 )

@@ -334,5 +334,9 @@
   "{} chunks": "{} 个分块",
   "{} from": "{} 来自",
   "{} from ": "{} 来自",
-  "⏳ Fetching tools...": "⏳ 正在获取工具..."
+  "⏳ Fetching tools...": "⏳ 正在获取工具...",
+  "<h5>No strong evidence for this question: the best match scores {score:.2f}, below the {threshold:.2f} threshold, so the answer was skipped.</h5>": "<h5>这个问题没有足够依据：最佳匹配得分 {score:.2f}，低于阈值 {threshold:.2f}，因此没有作答。</h5>",
+  "The knowledge base has no evidence for this question (best match {score:.2f}, below the {threshold:.2f} threshold).\n\nWhat to try:\n1. use more specific keywords;\n2. check that the file finished indexing (Files tab shows blocks and loader);\n3. under \"Search in File(s)\", pick the file explicitly.": "知识库中没有回答这个问题所需的依据（最佳匹配得分 {score:.2f}，低于阈值 {threshold:.2f}）。\n\n可以试试：\n1. 换用更具体的关键词；\n2. 确认文件已完成索引（「文件集合」页会显示块数与 loader）；\n3. 在「在文件中搜索」里明确选中该文件。",
+  "profile": "文件档案",
+  "File profile": "文件档案"
 }

@@ -1,3 +1,4 @@
+import logging
 import os
 
 import markdown
@@ -8,6 +9,32 @@ from kotaemon.base import RetrievedDocument
 from .i18n import tr
 
 BASE_PATH = os.environ.get("GR_FILE_ROOT_PATH", "")
+
+logger = logging.getLogger(__name__)
+
+
+def detect_language(text: str) -> str | None:
+    """Language code of ``text``, tolerant of the detector's return shape.
+
+    ``fast_langdetect.detect`` returns a **list** such as ``[{"lang": "zh", ...}]``.
+    Indexing it with ``["lang"]`` raised ``TypeError`` on every citation preview, so the
+    bare ``except`` printed the message and fell back — the language-aware branch never
+    ran and every answer logged a few "list indices must be integers" lines
+    (MODIFICATIONS §5.19).
+
+    Returns ``None`` when detection fails; callers then treat the text as untagged.
+    """
+    try:
+        result = detect(text)
+    except Exception as exc:  # noqa: BLE001 - detection is best effort
+        logger.warning("could not detect the language of a citation: %s", exc)
+        return None
+
+    if isinstance(result, dict):
+        return result.get("lang")
+    if isinstance(result, list) and result and isinstance(result[0], dict):
+        return result[0].get("lang")
+    return None
 
 
 def is_close(val1, val2, tolerance=1e-9):
@@ -82,16 +109,18 @@ class Render:
         text = doc.content
         pdf_path = doc.metadata.get("file_path", "")
 
+        # Only PDFs get the inline preview, so only a PDF is worth a warning when its
+        # file is gone: the stored copy of a non-PDF is never opened in the viewer, and
+        # warning on every citation made the log useless (MODIFICATIONS §5.12).
+        is_pdf = doc.metadata.get("file_type", "") == "application/pdf"
+        if not is_pdf:
+            return html_content
+
         if not os.path.isfile(pdf_path):
             print(f"pdf-path: {pdf_path} does not exist")
             return html_content
 
-        is_pdf = doc.metadata.get("file_type", "") == "application/pdf"
         page_idx = int(doc.metadata.get("page_label", 1))
-
-        if not is_pdf:
-            print("Document is not pdf")
-            return html_content
 
         if page_idx < 0:
             print("Fail to extract page number")
@@ -100,8 +129,10 @@ class Render:
         if not highlight_text:
             phrase = "false"
             try:
-                lang = detect(text.replace("\n", " "))["lang"]
-                if lang not in ["ja", "cn"]:
+                # the detector returns a list; asking it for ["lang"] raised on every
+                # preview and the bare except hid it (MODIFICATIONS §5.19)
+                lang = detect_language(text.replace("\n", " "))
+                if lang not in ["ja", "cn", "zh"]:
                     highlight_words = [
                         t[:-1] if t.endswith("-") else t for t in text.split("\n")
                     ]
@@ -111,8 +142,8 @@ class Render:
                 highlight_text = (
                     text.replace("\n", "").replace('"', "").replace("'", "")
                 )
-            except Exception as e:
-                print(e)
+            except Exception as exc:  # noqa: BLE001 - the link is still usable
+                logger.warning("could not build the citation highlight: %s", exc)
                 highlight_text = text
         else:
             phrase = "true"
@@ -123,6 +154,7 @@ class Render:
             [{tr('Preview')}]
         </a>
         """  # noqa
+
     @staticmethod
     def highlight(text: str, elem_id: str | None = None) -> str:
         """Highlight text"""

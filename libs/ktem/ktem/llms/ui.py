@@ -33,7 +33,8 @@ class LLMManagement(BasePage):
             self.llm_list = gr.DataFrame(
                 headers=["name", "vendor", "default"],
                 interactive=False,
-                column_widths=[30, 40, 30],
+                # percentages, not pixels: Gradio reads a bare number as px (§5.17)
+                column_widths=["30%", "40%", "30%"],
             )
 
             with gr.Column(visible=False) as self._selected_panel:

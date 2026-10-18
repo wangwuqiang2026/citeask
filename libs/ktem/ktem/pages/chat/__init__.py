@@ -830,7 +830,11 @@ class ChatPage(BasePage):
 
         def raise_error_on_state(state):
             if not state:
-                raise ValueError("Chat suggestion disabled")
+                # Gradio has no "skip the rest of the .then chain" primitive, so
+                # this handler aborts it by raising. Use the framework's own error
+                # type: a bare exception can escape the queue worker and take the
+                # whole server down on this platform.
+                raise gr.Error("Chat suggestion is disabled")
 
         self.chat_control.cb_suggest_chat.change(
             fn=toggle_chat_suggestion,

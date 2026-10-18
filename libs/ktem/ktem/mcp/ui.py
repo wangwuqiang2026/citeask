@@ -34,7 +34,8 @@ class MCPManagement(BasePage):
             self.mcp_list = gr.DataFrame(
                 headers=["name", "config"],
                 interactive=False,
-                column_widths=[30, 70],
+                # percentages, not pixels: Gradio reads a bare number as px (§5.17)
+                column_widths=["30%", "70%"],
             )
 
             with gr.Column(visible=False) as self._selected_panel:

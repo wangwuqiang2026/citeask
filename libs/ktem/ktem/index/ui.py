@@ -46,7 +46,9 @@ class IndexManagement(BasePage):
             self.index_list = gr.DataFrame(
                 headers=["id", "name", "index type"],
                 interactive=False,
-                column_widths=[10, 30, 60],
+                # percentages: Gradio reads a bare number as pixels, which clipped the
+                # text (MODIFICATIONS §5.17)
+                column_widths=["10%", "30%", "60%"],
             )
 
             with gr.Column(visible=False) as self._selected_panel:

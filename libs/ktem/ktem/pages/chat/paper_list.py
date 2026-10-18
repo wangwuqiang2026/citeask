@@ -19,7 +19,8 @@ class PaperListPage(BasePage):
             self.examples = gr.DataFrame(
                 value=[],
                 headers=["title", "url", "upvotes"],
-                column_widths=[60, 30, 10],
+                # percentages, not pixels: Gradio reads a bare number as px (§5.17)
+                column_widths=["60%", "30%", "10%"],
                 interactive=False,
                 elem_id="paper-suggestion",
                 wrap=True,

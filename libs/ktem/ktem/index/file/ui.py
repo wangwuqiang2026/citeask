@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from theflow.settings import settings as flowsettings
 
 from ...utils.commands import WEB_SEARCH_COMMAND
+from ...utils.file_profile import describe_profile, profile_text
 from ...utils.i18n import tr
 from ...utils.rate_limit import check_rate_limit
 from ...utils.selector import (
@@ -28,6 +29,7 @@ from ...utils.selector import (
     SELECTOR_MODE_DISABLED,
     SELECTOR_MODE_SELECT,
     SELECTOR_STATE_SENTINEL,
+    resolve_selection,
     resolve_selector_user_id,
 )
 from .utils import download_arxiv_pdf, is_arxiv_url
@@ -37,6 +39,38 @@ KH_SSO_ENABLED = getattr(flowsettings, "KH_SSO_ENABLED", False)
 DOWNLOAD_MESSAGE = "Start download"
 MAX_FILENAME_LENGTH = 20
 MAX_FILE_COUNT = 200
+MAX_ERROR_LENGTH = 60
+
+#: Columns of the file list, in display order. The internal ``id`` is intentionally not
+#: one of them: it means nothing to the user, and row selection reads it from the state
+#: records instead of the rendered table (MODIFICATIONS §5.18).
+FILE_LIST_COLUMNS = ("name", "size", "tokens", "loader", "profile", "date_created")
+
+#: Widths of those columns, in **percentages of the panel**. Percentages make the table
+#: exactly as wide as its container, so the whole "the table is 1560px inside a 1000px
+#: panel" cascade disappears: no horizontal scrollbar inside the table and no second one
+#: on an ancestor flex box. Pixel widths were tried first and produced exactly that
+#: double scrollbar, so the trade-off is explicit: a long value is clipped, and its full
+#: text is available from the hover tooltip and from the profile shown under the table.
+FILE_LIST_WIDTHS = ("28%", "7%", "7%", "15%", "29%", "14%")
+
+
+def describe_loader(note: dict) -> str:
+    """What produced the text of this file — or why it produced nothing.
+
+    A file whose parse failed stays in the list but cannot answer anything, which
+    reads as "uploaded but not recognized". Showing the error in the ``loader``
+    column is what stops such a file from looking successfully indexed (and it is
+    where the reason to fix, e.g. a missing reader dependency, becomes visible).
+    """
+    error = note.get("error") if note else None
+    if error:
+        text = str(error)
+        if len(text) > MAX_ERROR_LENGTH:
+            text = text[: MAX_ERROR_LENGTH - 3] + "..."
+        return f"\u26a0 {text}"
+    return note.get("loader", "-") if note else "-"
+
 
 chat_input_focus_js = """
 function() {
@@ -238,17 +272,17 @@ class FileIndexPage(BasePage):
         )
         self.file_list_state = gr.State(value=None)
         self.file_list = gr.DataFrame(
-            headers=[
-                "id",
-                "name",
-                "size",
-                "tokens",
-                "loader",
-                "date_created",
-            ],
-            column_widths=[0, 50, 8, 7, 15, 20],
+            # No `id` column: the internal file id means nothing to the user, and row
+            # selection reads it from the state list instead (MODIFICATIONS §5.18).
+            # **Pixel widths sized to the content** — Gradio reads a bare number as
+            # pixels — so the columns are wide enough to show their text instead of
+            # being clipped; a table wider than the panel scrolls horizontally rather
+            # than putting an ellipsis in every cell.
+            headers=list(FILE_LIST_COLUMNS),
+            column_widths=list(FILE_LIST_WIDTHS),
             interactive=False,
             wrap=False,
+            height=420,
             elem_id="file_list_view",
         )
 
@@ -315,7 +349,8 @@ class FileIndexPage(BasePage):
                 "files",
                 "date_created",
             ],
-            column_widths=[0, 25, 55, 20],
+            # percentages for the same reason as the file list above (§5.17)
+            column_widths=["0%", "25%", "55%", "20%"],
             interactive=False,
             wrap=False,
         )
@@ -477,6 +512,8 @@ class FileIndexPage(BasePage):
             return "", ""
 
         Index = self._index._resources["Index"]
+        Source = self._index._resources["Source"]
+        profile_note: dict = {}
         with Session(engine) as session:
             matches = session.execute(
                 select(Index).where(
@@ -489,6 +526,11 @@ class FileIndexPage(BasePage):
             docs = sorted(
                 docs, key=lambda x: x.metadata.get("page_label", float("inf"))
             )
+            source_row = session.execute(
+                select(Source.note).where(Source.id == file_id)
+            ).first()
+            if source_row and isinstance(source_row[0], dict):
+                profile_note = source_row[0]
 
         # Filter the chunks by type
         if type_filter and type_filter != "all":
@@ -506,6 +548,12 @@ class FileIndexPage(BasePage):
         type_parts = [f"{c} {tr(t.capitalize())}" for t, c in sorted(type_counts.items())]
         type_str = ", ".join(type_parts) if type_parts else "0"
         header_md = f"**{tr('{} chunks').format(total)}** ({type_str})"
+        # the full profile of the selected file, where there is room for it
+        # (the table column only carries a truncated excerpt, MODIFICATIONS §5.17)
+        summary = profile_note.get("summary") if profile_note else None
+        full_profile = profile_text(summary)
+        if full_profile:
+            header_md += f"\n\n**{tr('File profile')}**：{full_profile}"
 
         # Render the chunks
         chunks_html: list[str] = []
@@ -587,7 +635,8 @@ class FileIndexPage(BasePage):
 
         if vs_ids:
             self._index._vs.delete(vs_ids)
-        self._index._docstore.delete(ds_ids)
+        if ds_ids:
+            self._index._docstore.delete(ds_ids)
 
         gr.Info(f"File {file_name} has been deleted")
 
@@ -1027,7 +1076,8 @@ class FileIndexPage(BasePage):
 
         self.file_list.select(
             fn=self.interact_file_list,
-            inputs=[self.file_list],
+            # the state list, not the table: the table has no `id` column any more
+            inputs=[self.file_list_state],
             outputs=[self.selected_file_id, self.selected_panel],
             show_progress="hidden",
         ).then(
@@ -1488,16 +1538,7 @@ class FileIndexPage(BasePage):
         if user_id is None:
             # not signed in
             return [], pd.DataFrame.from_records(
-                [
-                    {
-                        "id": "-",
-                        "name": "-",
-                        "size": "-",
-                        "tokens": "-",
-                        "loader": "-",
-                        "date_created": "-",
-                    }
-                ]
+                [{column: "-" for column in FILE_LIST_COLUMNS}]
             )
 
         Source = self._index._resources["Source"]
@@ -1525,26 +1566,26 @@ class FileIndexPage(BasePage):
                     "tokens": self.format_size_human_readable(
                         each[0].note.get("tokens", "-"), suffix=""
                     ),
-                    "loader": each[0].note.get("loader", "-"),
+                    "loader": describe_loader(each[0].note),
+                    "profile": describe_profile(
+                        each[0].note, limit=45, suffix=""
+                    ),
                     "date_created": each[0].date_created.strftime("%Y-%m-%d %H:%M:%S"),
                 }
                 for each in session.execute(statement).all()
             ]
 
         if results:
-            file_list = pd.DataFrame.from_records(results)
-        else:
+            # the state keeps the full records (with ids); the table shows the columns
             file_list = pd.DataFrame.from_records(
                 [
-                    {
-                        "id": "-",
-                        "name": "-",
-                        "size": "-",
-                        "tokens": "-",
-                        "loader": "-",
-                        "date_created": "-",
-                    }
+                    {column: item[column] for column in FILE_LIST_COLUMNS}
+                    for item in results
                 ]
+            )
+        else:
+            file_list = pd.DataFrame.from_records(
+                [{column: "-" for column in FILE_LIST_COLUMNS}]
             )
 
         return results, file_list
@@ -1694,16 +1735,24 @@ class FileIndexPage(BasePage):
         return None
 
     def interact_file_list(self, list_files, ev: gr.SelectData):
-        if ev.value == "-" and ev.index[0] == 0:
+        """Map a clicked row to the file id.
+
+        ``list_files`` is the *state* list (one dict per row), not the rendered table:
+        the table no longer shows an ``id`` column (MODIFICATIONS §5.18), so the id is
+        read from the same records the table was built from.
+        """
+        if not list_files:
             gr.Info("No file is uploaded")
+            return None, self.selected_panel_false
+
+        if ev.index is None or ev.index[0] >= len(list_files):
             return None, self.selected_panel_false
 
         if not ev.selected:
             return None, self.selected_panel_false
 
-        return list_files["id"][ev.index[0]], self.selected_panel_true.format(
-            name=list_files["name"][ev.index[0]]
-        )
+        item = list_files[ev.index[0]]
+        return item["id"], self.selected_panel_true.format(name=item["name"])
 
     def interact_group_list(self, list_groups, ev: gr.SelectData):
         selected_id = ev.index[0]
@@ -1827,8 +1876,6 @@ class FileSelector(BasePage):
 
         if mode == SELECTOR_MODE_DISABLED:
             return []
-        elif mode == SELECTOR_MODE_SELECT:
-            return selected
 
         file_ids = []
         with Session(engine) as session:
@@ -1841,7 +1888,14 @@ class FileSelector(BasePage):
             for (id,) in results:
                 file_ids.append(id)
 
-        return file_ids
+        # An empty dropdown under "Search in File(s)" is not "search nothing":
+        # refreshing the file list (e.g. after an upload) clears the value, and
+        # returning [] made the retriever skip retrieval and the answer claim
+        # "no evidence, best match 0.00" (MODIFICATIONS §5.16). Fall back to all files.
+        scoped = resolve_selection(mode, selected, file_ids)
+        if mode == SELECTOR_MODE_SELECT and not scoped:
+            print("file selector: search-in-file with an empty selection -> all files")
+        return scoped
 
     def load_files(self, selected_files, user_id):
         options: list = []

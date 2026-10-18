@@ -283,4 +283,31 @@ function run() {
     chatInput.dispatchEvent(new Event("input", { bubbles: true }));
     chatInput.focus();
   };
+
+  // A table cell that is wider than its column shows an ellipsis; put the full text in
+  // a native tooltip so the user can read it on hover. Gradio re-renders the table on
+  // every update, so the decoration is re-applied by a MutationObserver
+  // (MODIFICATIONS §5.18).
+  const decorateClampedCells = (root) => {
+    root.querySelectorAll("td").forEach((cell) => {
+      const text = (cell.textContent || "").trim();
+      if (!text || text === "-") {
+        return;
+      }
+      if (cell.scrollWidth > cell.clientWidth + 1) {
+        cell.title = text;
+      } else if (cell.title) {
+        cell.removeAttribute("title");
+      }
+    });
+  };
+
+  const fileList = document.getElementById("file_list_view");
+  if (fileList) {
+    decorateClampedCells(fileList);
+    new MutationObserver(() => decorateClampedCells(fileList)).observe(fileList, {
+      childList: true,
+      subtree: true,
+    });
+  }
 }

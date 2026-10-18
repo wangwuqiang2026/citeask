@@ -80,7 +80,10 @@ button.selected {
 #resources-tab {
   /* Other view should not be too wide */
   border: none !important;
-  max-width: max(70vw, 1200px) !important;
+  /* Was max(70vw, 1200px): on a 1535px screen that left ~230px of empty margin on each
+     side, so wide tables (the file list) had to squeeze their columns. Use most of the
+     window instead, while keeping a readable cap on very large monitors. */
+  max-width: max(92vw, 1400px) !important;
   margin: 0 auto !important;
 }
 
@@ -190,6 +193,30 @@ mark {
 /* Show sort button only in File list*/
 #file_list_view .sort-button {
   display: block !important;
+}
+
+/* File table: one line per row. Columns are percentage-based, so the table never grows
+   wider than its panel — no horizontal scrollbar here and no second one from an ancestor
+   flex box (that cascade was the double-scrollbar bug). Cells are clipped only when a
+   value is wider than its column, and the full text then appears as a native tooltip on
+   hover (see main.js). */
+#file_list_view table th,
+#file_list_view table td {
+  overflow: hidden !important;
+  white-space: nowrap !important;
+}
+
+/* never let a flex ancestor grow to the table's content width (min-width: auto default) */
+#file_list_view {
+  overflow: hidden !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+}
+
+#file_list_view.table-wrap,
+#file_list_view .table-wrap {
+  max-width: 100% !important;
+  min-width: 0 !important;
 }
 
 #toggle-dark-button {

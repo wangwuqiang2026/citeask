@@ -137,7 +137,8 @@ class UserManagement(BasePage):
             self.state_user_list = gr.State(value=None)
             self.user_list = gr.DataFrame(
                 headers=["id", "name", "admin"],
-                column_widths=[0, 50, 50],
+                # percentages, not pixels: Gradio reads a bare number as px (§5.17)
+                column_widths=["0%", "50%", "50%"],
                 interactive=False,
             )
 

@@ -484,3 +484,7 @@ fastembed_cache/
 # other runtime caches written into the working directory
 data-gym-cache/
 flow_tmp/
+
+# runtime caches that land in the working directory
+theflow_HP/
+fasttext-langdetect/

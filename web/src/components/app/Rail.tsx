@@ -1,5 +1,6 @@
 import {
   Command as CommandIcon,
+  Database,
   FolderOpen,
   HelpCircle,
   Languages,
@@ -161,6 +162,11 @@ export function Rail() {
         to="/files"
         label={t("nav.files")}
         icon={<FolderOpen className="h-5 w-5" aria-hidden="true" />}
+      />
+      <NavRailLink
+        to="/resources"
+        label={t("nav.resources")}
+        icon={<Database className="h-5 w-5" aria-hidden="true" />}
       />
       <NavRailLink
         to="/settings"

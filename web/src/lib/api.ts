@@ -19,6 +19,9 @@ import type {
   UploadHandlers,
   User,
   UserPayload,
+  VendorCatalog,
+  VendorEntry,
+  VendorPayload,
 } from "./types";
 
 /** Explicit opt-in mock for local UI work without a running backend. */
@@ -319,6 +322,65 @@ export const api = {
   async deleteUser(id: string | number): Promise<void> {
     await request<void>(`/api/v1/users/${encodeURIComponent(String(id))}`, {
       method: "DELETE",
+    });
+  },
+
+  /* --------------------------------------------------------------- vendors */
+
+  /** Vendor catalog with the parameter metadata used to build the forms. */
+  async getVendorCatalog(): Promise<VendorCatalog> {
+    return request<VendorCatalog>("/api/v1/vendors");
+  },
+
+  async listVendors(kind: string): Promise<{ items: VendorEntry[] }> {
+    return request<{ items: VendorEntry[] }>(`/api/v1/vendors/${kind}`);
+  },
+
+  async getVendor(kind: string, name: string): Promise<VendorEntry> {
+    return request<VendorEntry>(
+      `/api/v1/vendors/${kind}/${encodeURIComponent(name)}`,
+    );
+  },
+
+  async createVendor(kind: string, body: VendorPayload): Promise<VendorEntry> {
+    return request<VendorEntry>(`/api/v1/vendors/${kind}`, {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify(body),
+    });
+  },
+
+  async updateVendor(
+    kind: string,
+    name: string,
+    body: VendorPayload,
+  ): Promise<VendorEntry> {
+    return request<VendorEntry>(
+      `/api/v1/vendors/${kind}/${encodeURIComponent(name)}`,
+      {
+        method: "PATCH",
+        headers: JSON_HEADERS,
+        body: JSON.stringify(body),
+      },
+    );
+  },
+
+  async deleteVendor(kind: string, name: string): Promise<void> {
+    await request<void>(
+      `/api/v1/vendors/${kind}/${encodeURIComponent(name)}`,
+      { method: "DELETE" },
+    );
+  },
+
+  /** Builds the chat client without sending a request (no tokens spent). */
+  async testVendor(
+    vendor: string,
+    params: Record<string, unknown>,
+  ): Promise<{ ok: boolean; message: string }> {
+    return request<{ ok: boolean; message: string }>("/api/v1/vendors/llms/test", {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ vendor, params }),
     });
   },
 

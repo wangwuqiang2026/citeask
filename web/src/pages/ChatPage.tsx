@@ -417,7 +417,11 @@ function ChatSession({ conversationId }: ChatSessionProps) {
             onUploadLegacy={uploadLegacy}
             onOpenSettings={() => setSettingsOpen(true)}
             reasoningLabel={choiceLabel(meta?.reasoning.choices, settings.reasoning)}
-            modelLabel={choiceLabel(meta?.models.choices, settings.llm)}
+            modelLabel={
+              settings.llm
+                ? choiceLabel(meta?.models.choices, settings.llm)
+                : t("chat.defaultModel")
+            }
             languageLabel={choiceLabel(meta?.languages.choices, settings.language)}
             citationLabel={choiceLabel(meta?.citations.choices, settings.citation)}
             scopeLabel={scopeLabel}

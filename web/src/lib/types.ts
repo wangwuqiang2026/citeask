@@ -250,3 +250,46 @@ export interface UserPayload {
   password?: string;
   admin?: boolean;
 }
+
+/* ---------------------------------------------------------------- vendors */
+
+/** One vendor parameter, as described by the vendor class itself. */
+export interface VendorParam {
+  name: string;
+  type: string;
+  help: string;
+  required: boolean;
+  default: unknown;
+  secret: boolean;
+}
+
+export interface VendorCatalogEntry {
+  name: string;
+  doc: string;
+  params: VendorParam[];
+}
+
+export interface VendorCatalog {
+  llms: VendorCatalogEntry[];
+  embeddings: VendorCatalogEntry[];
+  rerankings: VendorCatalogEntry[];
+  mcp: VendorCatalogEntry[];
+}
+
+export interface VendorEntry {
+  name: string;
+  vendor?: string;
+  model?: string;
+  default: boolean;
+  spec?: Record<string, unknown>;
+  config?: Record<string, unknown>;
+}
+
+export interface VendorPayload {
+  name?: string;
+  new_name?: string;
+  vendor?: string;
+  params?: Record<string, unknown>;
+  config?: Record<string, unknown>;
+  default?: boolean;
+}

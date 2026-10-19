@@ -2375,6 +2375,44 @@ SSE 事件：`start`（可带 `warning`）→ `token`/`reset` → `evidence`（�
 仍在 `/legacy`；这些操作要么依赖重启，要么是长表单，本轮只做只读视图 + 入口，避免做出一个
 半可用的编辑器。用户管理、账户改密、帮助文档已经可以在新界面完成。
 
+### 5.29 M4 起步：模型供应商与 MCP 的增删改（2026-10-19）
+
+经典界面里最大的那块表单——LLM / 向量 / 重排供应商与 MCP 配置——搬到新界面。改动不是手写
+一堆固定字段，而是**从供应商类自己的 `describe()` 生成表单**，所以以后新增供应商不用改前端。
+
+**后端**
+
+| 文件 | 内容 |
+|---|---|
+| [services/vendors.py](libs/ktem/ktem/services/vendors.py) | 供应商目录（`llms.vendors()` + `describe()["params"]` → 字段名/类型/帮助/必填/默认/是否密文）+ 三类模型的 CRUD + MCP CRUD；`test_llm()` 只构造客户端、**不发请求**（不花 token） |
+| [api/vendors.py](libs/ktem/ktem/api/vendors.py) | `GET /vendors`（目录）、`GET /vendors/{kind}`（列表）、`GET/POST/PATCH/DELETE /vendors/{kind}[/{name}]`；读目录任意登录用户可用，**改配置与读 spec 仅管理员**（spec 里是 API key） |
+
+细节：列表接口只回 `name/vendor/model/default`，spec 只在单条详情里给并且要求管理员；`PATCH`
+合并参数而不是整份覆盖，`__type__` 保留；把某个模型设为默认时管理器会自动清掉其它默认项。
+
+**前端**
+
+- [VendorDialog.tsx](web/src/components/resources/VendorDialog.tsx)：按目录生成表单（必填标 `*`、
+  密文用 password 框、`bool` 用开关、`int/float` 用数字框）；类型标签简化为 `str` / `str?` / `bool?`；
+  「检查配置」调 `POST /vendors/llms/test`；额外参数可在「高级参数（JSON）」里补，保存时合并。
+- [McpDialog.tsx](web/src/components/resources/McpDialog.tsx)：MCP 是自由 JSON（`command/args/env`
+  或 `url`），直接编辑 JSON 并做解析校验。
+- [ResourcesPage.tsx](web/src/pages/ResourcesPage.tsx)：模型资源四个分组都可增删改（删除有确认，
+  删默认模型会额外提示回退），非管理员只读；刷新后 `meta` 一并失效，聊天页的模型下拉立即跟上。
+
+**验证**
+
+| 项目 | 结果 |
+|---|---|
+| 后端 | 新增 `test_api_vendors.py` 8 例（目录字段、LLM 全流程、默认项移动后**恢复原默认**、未知供应商/重名 400、嵌入创建删除、MCP CRUD、非管理员 403、匿名 401）；API 套件 **56 passed** |
+| 前端 | `npm test` 41 passed、typecheck / lint 干净；JS gzip **271.92 kB** |
+| 浏览器 | 实测：新增 `uiverify-llm`（ChatOpenAI）→ 列表出现 → 编辑改 model 为 gpt-4o → 检查配置返回「模型配置有效（未实际发送请求）」→ 删除；MCP 同理新增/删除；测试条目已清理，默认模型仍是 `deepseek` |
+| 修正 | 目录按管理器注册顺序（ChatOpenAI 在前）、toast 文案区分用户/模型、MCP 按钮文案、去掉字段占位符与帮助文字重复 |
+
+**M4 剩余**：索引的新增/删除（依赖重启，经典界面写入后用 `app.index_manager` 重建，需要单独设计
+重启提示与失败回滚），以及下线 Gradio 默认入口（`KH_WEB_UI` 开关与经典页面的去留）——这两步
+建议单独一轮做，避免和已验证的供应商编辑混在一起。
+
 
 
 

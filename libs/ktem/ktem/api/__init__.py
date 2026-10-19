@@ -20,6 +20,7 @@ def install_routes(api: FastAPI) -> None:
         resources,
         settings,
         users,
+        vendors,
     )
 
     for module in (
@@ -31,6 +32,7 @@ def install_routes(api: FastAPI) -> None:
         users,
         resources,
         help,
+        vendors,
     ):
         api.include_router(module.router, prefix="/api/v1")
 

@@ -12,6 +12,8 @@ import { toast } from "sonner";
 
 import { PageFrame } from "@/components/app/PageFrame";
 import { ConfirmDialog } from "@/components/files/ConfirmDialog";
+import { McpDialog } from "@/components/resources/McpDialog";
+import { VendorDialog } from "@/components/resources/VendorDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,7 +30,7 @@ import { useMeta } from "@/hooks/use-api";
 import { api } from "@/lib/api";
 import { useT } from "@/lib/i18n";
 import { queryKeys } from "@/lib/query";
-import type { ModelResource, User } from "@/lib/types";
+import type { User, VendorEntry } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type TabKey = "indices" | "models" | "users";
@@ -63,35 +65,69 @@ function TabButton({
 function Section({
   title,
   count,
+  actions,
   children,
 }: {
   title: string;
   count?: number;
+  actions?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <section className="overflow-hidden rounded-md border border-border bg-panel">
-      <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
+      <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-2.5">
         <h2 className="text-sm font-medium text-fg">{title}</h2>
-        {count !== undefined ? (
-          <span className="text-2xs text-subtle">{count}</span>
-        ) : null}
+        <div className="flex items-center gap-2">
+          {count !== undefined ? (
+            <span className="text-2xs text-subtle">{count}</span>
+          ) : null}
+          {actions}
+        </div>
       </header>
       {children}
     </section>
   );
 }
 
-function PoolSection({
+type PoolRow = { name: string; vendor?: string; model?: string; default?: boolean };
+
+function ModelPool({
   title,
   rows,
+  canEdit,
+  addLabel,
+  onAdd,
+  onEdit,
+  onRemove,
 }: {
   title: string;
-  rows: readonly Partial<ModelResource>[] & { name: string }[];
+  rows: PoolRow[];
+  canEdit: boolean;
+  addLabel?: string;
+  onAdd?: () => void;
+  onEdit?: (row: PoolRow) => void;
+  onRemove?: (row: PoolRow) => void;
 }) {
   const t = useT();
+  const addTitle = addLabel ?? t("resources.addModel");
   return (
-    <Section title={title} count={rows.length}>
+    <Section
+      title={title}
+      count={rows.length}
+      actions={
+        canEdit && onAdd ? (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={addTitle}
+            title={addTitle}
+            onClick={onAdd}
+          >
+            <Plus className="h-4 w-4" aria-hidden="true" />
+          </Button>
+        ) : null
+      }
+    >
       {rows.length === 0 ? (
         <p className="px-4 py-3 text-sm text-subtle">{t("resources.empty")}</p>
       ) : (
@@ -109,9 +145,31 @@ function PoolSection({
               ) : null}
               {row.vendor ? <Badge variant="outline">{row.vendor}</Badge> : null}
               {row.model ? (
-                <span className="max-w-[45%] truncate text-2xs text-subtle">
+                <span className="max-w-[40%] truncate text-2xs text-subtle">
                   {row.model}
                 </span>
+              ) : null}
+              {canEdit ? (
+                <div className="flex shrink-0 gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={t("resources.editModel")}
+                    title={t("resources.editModel")}
+                    onClick={() => onEdit?.(row)}
+                  >
+                    <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={t("common.delete")}
+                    title={t("common.delete")}
+                    onClick={() => onRemove?.(row)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                  </Button>
+                </div>
               ) : null}
             </li>
           ))}
@@ -394,6 +452,7 @@ function UsersPanel() {
 
 export function ResourcesPage() {
   const t = useT();
+  const queryClient = useQueryClient();
   const { data: meta } = useMeta();
   const isAdmin = Boolean(meta?.user?.admin);
   const [tab, setTab] = useState<TabKey>("indices");
@@ -404,6 +463,51 @@ export function ResourcesPage() {
     staleTime: 60_000,
   });
   const resources = resourcesQuery.data;
+
+  const catalogQuery = useQuery({
+    queryKey: queryKeys.vendorCatalog,
+    queryFn: () => api.getVendorCatalog(),
+    staleTime: Infinity,
+  });
+  const catalog = catalogQuery.data;
+
+  const [vendorDialog, setVendorDialog] = useState<{
+    kind: string;
+    entry: VendorEntry | null;
+  } | null>(null);
+  const [mcpDialog, setMcpDialog] = useState<{ entry: VendorEntry | null } | null>(
+    null,
+  );
+  const [removeTarget, setRemoveTarget] = useState<{
+    kind: string;
+    name: string;
+    isDefault: boolean;
+  } | null>(null);
+
+  const refreshResources = () => {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.resources });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.meta });
+  };
+
+  const removeVendor = useMutation({
+    mutationFn: (target: { kind: string; name: string }) =>
+      api.deleteVendor(target.kind, target.name),
+    onSuccess: () => {
+      setRemoveTarget(null);
+      toast.success(t("resources.resourceDeleted"));
+      refreshResources();
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const openEdit = async (kind: string, name: string) => {
+    try {
+      const entry = await api.getVendor(kind, name);
+      setVendorDialog({ kind, entry });
+    } catch (error) {
+      toast.error((error as Error).message);
+    }
+  };
 
   const openClassic = () => window.open("/legacy/", "_blank", "noopener");
 
@@ -509,14 +613,113 @@ export function ResourcesPage() {
       ) : tab === "models" ? (
         <div className="space-y-4">
           <p className="text-sm text-muted">{t("resources.modelsHint")}</p>
-          <PoolSection title={t("resources.llms")} rows={resources.llms} />
-          <PoolSection title={t("resources.embeddings")} rows={resources.embeddings} />
-          <PoolSection title={t("resources.rerankings")} rows={resources.rerankings} />
-          <PoolSection title={t("resources.mcp")} rows={resources.mcp} />
+          <ModelPool
+            title={t("resources.llms")}
+            rows={resources.llms}
+            canEdit={isAdmin}
+            onAdd={() => setVendorDialog({ kind: "llms", entry: null })}
+            onEdit={(row) => void openEdit("llms", row.name)}
+            onRemove={(row) =>
+              setRemoveTarget({ kind: "llms", name: row.name, isDefault: !!row.default })
+            }
+          />
+          <ModelPool
+            title={t("resources.embeddings")}
+            rows={resources.embeddings}
+            canEdit={isAdmin}
+            onAdd={() => setVendorDialog({ kind: "embeddings", entry: null })}
+            onEdit={(row) => void openEdit("embeddings", row.name)}
+            onRemove={(row) =>
+              setRemoveTarget({ kind: "embeddings", name: row.name, isDefault: !!row.default })
+            }
+          />
+          <ModelPool
+            title={t("resources.rerankings")}
+            rows={resources.rerankings}
+            canEdit={isAdmin}
+            onAdd={() => setVendorDialog({ kind: "rerankings", entry: null })}
+            onEdit={(row) => void openEdit("rerankings", row.name)}
+            onRemove={(row) =>
+              setRemoveTarget({ kind: "rerankings", name: row.name, isDefault: !!row.default })
+            }
+          />
+          <ModelPool
+            title={t("resources.mcp")}
+            rows={resources.mcp}
+            canEdit={isAdmin}
+            addLabel={t("resources.addMcp")}
+            onAdd={() => setMcpDialog({ entry: null })}
+            onEdit={async (row) => {
+              try {
+                const entry = await api.getVendor("mcp", row.name);
+                setMcpDialog({ entry });
+              } catch (error) {
+                toast.error((error as Error).message);
+              }
+            }}
+            onRemove={(row) => setRemoveTarget({ kind: "mcp", name: row.name, isDefault: false })}
+          />
         </div>
       ) : (
         <UsersPanel />
       )}
+
+      <VendorDialog
+        open={vendorDialog !== null}
+        onOpenChange={(open) => {
+          if (!open) setVendorDialog(null);
+        }}
+        kind={vendorDialog?.kind ?? "llms"}
+        catalog={
+          vendorDialog?.kind === "embeddings"
+            ? (catalog?.embeddings ?? [])
+            : vendorDialog?.kind === "rerankings"
+              ? (catalog?.rerankings ?? [])
+              : (catalog?.llms ?? [])
+        }
+        entry={vendorDialog?.entry ?? null}
+        onSaved={() => {
+          toast.success(
+            vendorDialog?.entry
+              ? t("resources.resourceUpdated")
+              : t("resources.resourceCreated"),
+          );
+          refreshResources();
+        }}
+      />
+
+      <McpDialog
+        open={mcpDialog !== null}
+        onOpenChange={(open) => {
+          if (!open) setMcpDialog(null);
+        }}
+        entry={mcpDialog?.entry ?? null}
+        onSaved={() => {
+          toast.success(
+            mcpDialog?.entry
+              ? t("resources.resourceUpdated")
+              : t("resources.resourceCreated"),
+          );
+          refreshResources();
+        }}
+      />
+
+      <ConfirmDialog
+        open={removeTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setRemoveTarget(null);
+        }}
+        title={t("resources.deleteResourceTitle")}
+        description={
+          removeTarget?.isDefault
+            ? t("resources.deleteDefaultDescription", { name: removeTarget.name })
+            : t("resources.deleteResourceDescription", { name: removeTarget?.name ?? "" })
+        }
+        pending={removeVendor.isPending}
+        onConfirm={() => {
+          if (removeTarget) removeVendor.mutate(removeTarget);
+        }}
+      />
     </PageFrame>
   );
 }

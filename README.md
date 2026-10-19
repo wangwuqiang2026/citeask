@@ -416,8 +416,8 @@ Copy-Item .env.example .env
 > **新 Web 界面在 `/`，经典 Gradio 界面保留在 `/legacy/`。**
 > 迁移期两套并存：回滚只需在 `.env` 里设 `KH_WEB_UI=0` 并重启，根路径就回到经典界面。
 >
-> 已迁移：`/login` `/chat` `/files` `/settings`（含账户改密）`/resources`（索引 / 模型资源 /
-> 用户管理）`/help`（关于 + 使用指南）。
+> 已迁移：`/login` `/chat` `/files` `/settings`（含账户改密）`/resources`（索引只读 / 模型资源
+> **可增删改** / 用户管理）`/help`（关于 + 使用指南）。
 
 ### 前端开发（可选，运行应用不需要）
 
@@ -480,7 +480,7 @@ npm run build    # 产出到 web/dist（提交这份产物）
 （`ktem_tests/test_entity_rows.py`、`ktem_tests/test_render_score.py`）、示例语料与题集的一致性
 （`tools/tests/test_fixture_eval.py`）。
 
-新增的 Web API / 前端托管契约（48 例，`MODIFICATIONS.md` §5.25–§5.28）：
+新增的 Web API / 前端托管契约（56 例，`MODIFICATIONS.md` §5.25–§5.29）：
 
 ```powershell
 # 本机访问不到 huggingface.co 时先打开离线开关：否则 App() 会为重试
@@ -494,6 +494,7 @@ $env:HF_HUB_OFFLINE="1"; $env:TRANSFORMERS_OFFLINE="1"
     libs\ktem\ktem_tests\test_api_files.py `
     libs\ktem\ktem_tests\test_api_users.py `
     libs\ktem\ktem_tests\test_api_help_resources.py `
+    libs\ktem\ktem_tests\test_api_vendors.py `
     libs\ktem\ktem_tests\test_evidence_channel.py `
     libs\ktem\ktem_tests\test_web_host.py -q -p no:cacheprovider
 

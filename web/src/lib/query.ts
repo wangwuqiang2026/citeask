@@ -28,4 +28,6 @@ export const queryKeys = {
   resources: ["resources"] as const,
   help: ["help"] as const,
   users: ["users"] as const,
+  vendorCatalog: ["vendors", "catalog"] as const,
+  vendorEntries: (kind: string) => ["vendors", kind] as const,
 };

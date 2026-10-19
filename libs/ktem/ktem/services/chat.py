@@ -170,9 +170,11 @@ class ChatService:
 
     # ----------------------------------------------------------------- title
     @staticmethod
-    def _suggest_name(pairs: list) -> str | None:
+    def _suggest_name(pairs: list, language: str = "en") -> str | None:
         try:
-            text = SuggestConvNamePipeline()(pairs).text
+            pipeline = SuggestConvNamePipeline()
+            pipeline.lang = SUPPORTED_LANGUAGE_MAP.get(language, "English")
+            text = pipeline(pairs).text
             text = strip_think_tag(text).replace('"', "").replace("'", "")[:40]
             return text.strip() or None
         except Exception as exc:  # noqa: BLE001 - naming is a nicety
@@ -300,7 +302,12 @@ class ChatService:
 
         new_name = None
         if not regenerate and not pairs and text:
-            new_name = self._suggest_name(pairs + [[message, text]])
+            # The title is a UI string too: use the answer language, otherwise a
+            # Chinese conversation gets an English title from the upstream prompt.
+            language = (overrides or {}).get("language") or settings.get(
+                "reasoning.lang", "en"
+            )
+            new_name = self._suggest_name(pairs + [[message, text]], language)
 
         try:
             self._conversations.persist_turn(

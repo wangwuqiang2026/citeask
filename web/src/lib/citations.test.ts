@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { splitCitations, stripCitations } from "./citations.ts";
+import {
+  normalizeCitationLinks,
+  splitCitations,
+  stripCitations,
+} from "./citations.ts";
 
 describe("citation markers", () => {
   it("splits text and 1-based marker positions", () => {
@@ -31,5 +35,20 @@ describe("citation markers", () => {
 
   it("strips markers for plain-text copies", () => {
     assert.equal(stripCitations("结论【1】【2】。"), "结论。");
+  });
+
+  it("unwraps the classic UI's inline-citation anchor", () => {
+    assert.equal(
+      normalizeCitationLinks(
+        "加 4 分<a href='#' class='citation' id='mark-1'>【1】</a>。",
+      ),
+      "加 4 分【1】。",
+    );
+  });
+
+  it("leaves ordinary links and unknown classes alone", () => {
+    const text =
+      '<a href="https://example.com">链接</a><a class="other">【2】</a>';
+    assert.equal(normalizeCitationLinks(text), text);
   });
 });

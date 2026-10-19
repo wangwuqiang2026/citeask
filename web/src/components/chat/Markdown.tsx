@@ -3,7 +3,7 @@ import ReactMarkdown from "react-markdown";
 import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
 
-import { splitCitations } from "@/lib/citations";
+import { normalizeCitationLinks, splitCitations } from "@/lib/citations";
 
 interface MarkdownProps {
   content: string;
@@ -48,6 +48,7 @@ function withCitations(
  */
 export const Markdown = memo(function Markdown(props: MarkdownProps) {
   const render = (children: ReactNode) => withCitations(children, props);
+  const content = normalizeCitationLinks(props.content);
 
   return (
     <div className="md">
@@ -66,7 +67,7 @@ export const Markdown = memo(function Markdown(props: MarkdownProps) {
           ),
         }}
       >
-        {props.content}
+        {content}
       </ReactMarkdown>
     </div>
   );

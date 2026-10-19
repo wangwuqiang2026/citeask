@@ -49,7 +49,9 @@ def _patch_pipeline(monkeypatch):
         ChatService, "build_pipeline", lambda self, *args, **kwargs: (FakePipeline(), {}, "simple")
     )
     monkeypatch.setattr(
-        ChatService, "_suggest_name", staticmethod(lambda pairs: None)
+        ChatService,
+        "_suggest_name",
+        staticmethod(lambda pairs, language="en": None),
     )
     monkeypatch.setattr(ChatService, "_suggestions", lambda self, *args, **kwargs: [])
 
@@ -114,3 +116,21 @@ def test_stream_reports_pipeline_errors(monkeypatch, logged_in):
     detail = logged_in.get(f"/api/v1/conversations/{conversation_id}").json()
     assert detail["messages"] == [], "a failed turn must not be persisted"
     logged_in.delete(f"/api/v1/conversations/{conversation_id}")
+
+
+def test_suggest_name_uses_answer_language(monkeypatch):
+    from ktem.services import chat as chat_module
+
+    seen = {}
+
+    class FakeTitlePipeline:
+        lang = "English"
+
+        def __call__(self, pairs):
+            seen["lang"] = self.lang
+            return Document(text='"中文标题"')
+
+    monkeypatch.setattr(chat_module, "SuggestConvNamePipeline", FakeTitlePipeline)
+
+    assert ChatService._suggest_name([["问", "答"]], "zh") == "中文标题"
+    assert seen["lang"] == "Chinese"

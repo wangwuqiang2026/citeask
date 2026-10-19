@@ -14,6 +14,18 @@ export type InlineToken =
 /** `【n】` is the documented marker; `[n]` is accepted for older answers. */
 const CITATION_PATTERN = /【(\d+)】|\[(\d+)\]/g;
 
+/**
+ * The inline-citation pipeline wraps markers in an HTML anchor for the classic
+ * Gradio UI (`<a class='citation' id='mark-1'>【1】</a>`). React renders markdown
+ * without raw HTML, so unwrap the anchor back to the marker the renderer knows.
+ */
+const CITATION_LINK_PATTERN =
+  /<a\b[^>]*\bclass=['"]citation['"][^>]*>【\s*(\d+)\s*】<\/a>/gi;
+
+export function normalizeCitationLinks(text: string): string {
+  return text.replace(CITATION_LINK_PATTERN, "【$1】");
+}
+
 export function splitCitations(text: string): InlineToken[] {
   const tokens: InlineToken[] = [];
   let lastIndex = 0;

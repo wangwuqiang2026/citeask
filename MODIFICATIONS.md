@@ -1166,7 +1166,7 @@ uv sync --python 3.10 --no-install-package llama-cpp-python
 
 ### 8.3 与上游的边界（面试必须能说清）
 
-仓库包含上游 kotaemon 的代码，上游提供了 RAG 骨架与经典 Gradio 页面；本仓库的 45 个提交、
+仓库包含上游 kotaemon 的代码，上游提供了 RAG 骨架与经典 Gradio 页面；本仓库的 47 个提交、
 343 个源文件改动集中在上面的四块（检索/OCR/评测/全栈/工程化）。被问"哪部分是你写的"时，
 直接按 commit 或 `MODIFICATIONS.md` 的文件清单回答，不要声称上游框架也是自己从零写的。
 简历里只写"在开源 RAG 代码库上完成..."，把重点放在可验证的改造与数字上。

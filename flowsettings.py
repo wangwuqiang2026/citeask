@@ -45,8 +45,14 @@ KH_DEMO_MODE = config("KH_DEMO_MODE", default=False, cast=bool)
 KH_OLLAMA_URL = config("KH_OLLAMA_URL", default="http://localhost:11434/v1/")
 
 # App can be ran from anywhere and it's not trivial to decide where to store app data.
-# So let's use the same directory as the flowsetting.py file.
-KH_APP_DATA_DIR = this_dir / "ktem_app_data"
+# So let's use the same directory as the flowsetting.py file. Set KH_APP_DATA_DIR to
+# keep demo/test state (documents, sessions, caches) away from the real one; relative
+# paths are resolved against this file so `python app.py` works from any directory.
+KH_APP_DATA_DIR = Path(
+    config("KH_APP_DATA_DIR", default=str(this_dir / "ktem_app_data"))
+).expanduser()
+if not KH_APP_DATA_DIR.is_absolute():
+    KH_APP_DATA_DIR = this_dir / KH_APP_DATA_DIR
 KH_APP_DATA_EXISTS = KH_APP_DATA_DIR.exists()
 KH_APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
 

@@ -274,6 +274,7 @@ coverage.xml
 *.py,cover
 .hypothesis/
 .pytest_cache/
+pytest-of-*/
 cover/
 
 # Translations

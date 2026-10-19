@@ -127,6 +127,17 @@ def test_a_narrow_question_never_routes_to_more_than_top_m():
     assert len(routed) == 2
 
 
+def test_equal_profiles_are_broken_by_file_id():
+    """Equal profile similarity must route in the same order every run.
+
+    The order decides which file the per-file pass visits first, so an unstable tie
+    moves a measurement by one question (MODIFICATIONS §5.22).
+    """
+    vectors = {"b": [1.0, 0.0], "a": [1.0, 0.0]}
+
+    assert rank_files([1.0, 0.0], vectors, top_m=2) == ["a", "b"]
+
+
 def test_a_changed_profile_changes_the_cache_key():
     first = profile_cache_key("file-1", "文件：a")
     second = profile_cache_key("file-1", "文件：b")

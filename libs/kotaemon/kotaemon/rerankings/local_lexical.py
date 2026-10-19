@@ -66,6 +66,23 @@ def lexical_score(query_terms: Iterable[str], document: str) -> float:
     return matched / len(unique_terms)
 
 
+def scoring_text(document: Document) -> str:
+    """The text the overlap is measured on: the chunk **plus its file name**.
+
+    A question that names a file shares almost no characters with the file's content
+    when that content is source code (``代码.txt 讲了什么算法`` against
+    ``def gaussian(...)``), yet the name is exactly what tells the chunks apart: every
+    chunk of the named file carries it. Without this the reranker scores every chunk 0 —
+    and a 0 rerank score made the evidence panel fall back to vector similarity, where
+    the relevant code and the unrelated notice chunks sat in the same 0.29-0.36 band
+    (MODIFICATIONS §5.23).
+    """
+    metadata = getattr(document, "metadata", None) or {}
+    name = metadata.get("file_name") or ""
+    text = getattr(document, "text", "") or ""
+    return f"{name} {text}".strip()
+
+
 class LocalLexicalReranker(BaseReranking):
     """Reorder retrieved chunks by lexical overlap with the question."""
 
@@ -85,7 +102,7 @@ class LocalLexicalReranker(BaseReranking):
         query_terms = tokenize(query)
         scored = []
         for document in documents:
-            score = lexical_score(query_terms, document.text or "")
+            score = lexical_score(query_terms, scoring_text(document))
             document.metadata["rerank_score"] = round(score, 4)
             scored.append((score, document))
 

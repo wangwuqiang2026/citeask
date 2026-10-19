@@ -62,6 +62,41 @@ def test_an_empty_query_scores_zero():
 
 
 # --------------------------------------------------------------------------- #
+# the file name counts as overlap (§5.23)
+# --------------------------------------------------------------------------- #
+def named_doc(text, name, score=0.5):
+    return RetrievedDocument(text=text, metadata={"file_name": name}, score=score)
+
+
+def test_the_file_name_counts_as_overlap():
+    """A question that names the file shares no words with code, but it shares the name.
+
+    Without the name every chunk of a code file scores 0, the panel then falls back to
+    vector similarity, and relevant code chunks look the same as unrelated notices
+    (MODIFICATIONS §5.23).
+    """
+    reranker = LocalLexicalReranker()
+    code = named_doc(
+        "def gaussian(X, num_centers=10):\n    return np.exp(-d)", "代码.txt"
+    )
+    prose = named_doc("计算机学院入党积极分子积分细则", "积分细则.pdf")
+
+    result = reranker.run([prose, code], "代码.txt讲了什么算法")
+
+    assert result[0] is code
+    assert code.metadata["rerank_score"] > prose.metadata["rerank_score"]
+
+
+def test_the_file_name_alone_does_not_rescue_an_unrelated_file():
+    reranker = LocalLexicalReranker()
+    code = named_doc("def gaussian(X): ...", "main.py")
+
+    reranker.run([code], "代码.txt讲了什么算法")
+
+    assert code.metadata["rerank_score"] == 0.0
+
+
+# --------------------------------------------------------------------------- #
 # the reranker itself
 # --------------------------------------------------------------------------- #
 def test_documents_are_reordered_by_overlap():

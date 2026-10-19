@@ -45,6 +45,11 @@ from sqlalchemy.orm import Session
 from theflow.settings import settings
 from theflow.utils.modules import import_dotted_string
 
+from kotaemon.abstain import (
+    NO_SIMILARITY,
+    cell_names_entity,
+    row_identifier_terms,
+)
 from kotaemon.base import BaseComponent, Document, Node, Param, RetrievedDocument
 from kotaemon.embeddings import BaseEmbeddings
 from kotaemon.indices import VectorIndexing, VectorRetrieval
@@ -175,6 +180,11 @@ class DocumentRetrievalPipeline(BaseFileIndexRetriever):
             logger.info(f"Skip retrieval because of no selected files: {self}")
             return []
 
+        # The user's selection, before routing narrows it: the row lookup below searches
+        # the whole selection, because a question about one person has to reach the file
+        # that names them even when the profile cut dropped it (MODIFICATIONS §5.21).
+        selection = list(doc_ids)
+
         # Embed the question once: file routing and the per-file pass both need it, and
         # it is the expensive part of a retrieval (MODIFICATIONS §5.13/§5.14).
         route_enabled = len(doc_ids) > 1 and bool(
@@ -195,9 +205,18 @@ class DocumentRetrievalPipeline(BaseFileIndexRetriever):
 
         retrieval_kwargs: dict = {}
         with Session(engine) as session:
-            stmt = select(self.Index).where(
-                self.Index.relation_type == "document",
-                self.Index.source_id.in_(doc_ids),
+            # The order of ``chunk_ids`` decides the order of the per-file pass and of
+            # equal-score candidates, so it has to be explicit: a plain ``IN`` query came
+            # back in whatever order the database felt like, and two identical runs of the
+            # same question then differed by one context slot (measured: the same 27
+            # questions scored 26/27 or 27/27 depending on the process).
+            stmt = (
+                select(self.Index)
+                .where(
+                    self.Index.relation_type == "document",
+                    self.Index.source_id.in_(doc_ids),
+                )
+                .order_by(self.Index.id)
             )
             results = session.execute(stmt)
             chunk_ids = [r[0].target_id for r in results.all()]
@@ -250,12 +269,28 @@ class DocumentRetrievalPipeline(BaseFileIndexRetriever):
 
         if per_file:
             docs = self._fill_absent_sources(text, docs, doc_ids, retrieval_kwargs)
-            docs = diversify_by_source(docs, self.top_k)
+
+        # The chunk that *names* the queried person wins a slot before any ranking does:
+        # a spreadsheet row scores ~0.34 against a question while the prose that sets
+        # the rules scores ~0.49, so the row that answers "can he win this scholarship"
+        # is often not in the ten slots at all, and the model answers "cannot determine"
+        # (MODIFICATIONS §5.21). The row is exact evidence, so it is promoted, not
+        # ranked, and it gets its own slot: taking one of the ten would push out the
+        # rule chunk the same question needs (measured: a cross-file scoring question
+        # lost its 学科竞赛 clause that way).
+        row_docs = self._entity_row_docs(text, selection, doc_ids)
+        docs = self._promote_entity_rows(docs, row_docs)
+        budget = self.top_k + len(row_docs)
+
+        if per_file or row_docs:
+            docs = diversify_by_source(docs, budget)
             print(
                 "per-file retrieval: {} chunks from {} files".format(
                     len(docs), len({source_key(doc) for doc in docs})
                 )
             )
+        if row_docs:
+            print(f"entity row lookup: {len(row_docs)} chunk(s) promoted")
 
         if not self.get_extra_table:
             return docs
@@ -554,6 +589,98 @@ class DocumentRetrievalPipeline(BaseFileIndexRetriever):
             key=lambda doc: float(getattr(doc, "score", 0.0) or 0.0), reverse=True
         )
         return merged
+
+    def _entity_row_docs(
+        self,
+        question: str,
+        selection: list[str],
+        in_scope: list[str],
+    ) -> list[RetrievedDocument]:
+        """Chunks that name the question's entity in a cell of a table row.
+
+        A question about one student is a row lookup, and the row is not what a vector
+        query ranks first: on the scholarship corpus ``王务强``'s standing row scores
+        0.351 while the notice that only *sets the rules* scores 0.583, and the 0.80
+        relative cut drops both the grade table and the practice table before the
+        context is built — the model then answers "cannot determine" although every
+        number needed is in the index (MODIFICATIONS §5.21).
+
+        The full-text index already knows which chunks contain the name, so this pass
+        asks it directly and promotes those chunks (one per file, ``KH_ENTITY_ROWS`` in
+        total). Two filters keep it honest:
+
+        * **row identifiers only** (:func:`row_identifier_terms`): ``奖学金`` is prose
+          and ``三等奖`` is an award column that repeats down a chunk — neither
+          identifies a row;
+        * the term must sit in a **cell** (:func:`cell_names_entity`), so a sentence
+          that merely contains it cannot ride along.
+
+        ``selection`` is the user's whole choice; ``in_scope`` is what routing kept. The
+        difference is the point: a file dropped by routing can still carry the row.
+        """
+        limit = int(getattr(settings, "KH_ENTITY_ROWS", 3) or 0)
+        if limit <= 0 or not selection or self.retrieval_mode != "hybrid":
+            return []
+
+        candidates = int(getattr(settings, "KH_ROUTING_ENTITY_CANDIDATES", 30) or 30)
+        max_chunks = int(getattr(settings, "KH_ENTITY_ROW_MAX_CHUNKS", 0) or 0)
+        try:
+            hits = self.DS.query(question, top_k=candidates)
+        except Exception as exc:  # noqa: BLE001 - never break retrieval
+            logger.warning("could not look up the entity row: %s", exc)
+            return []
+
+        allowed = {str(file_id) for file_id in selection}
+        considered: list[tuple[str, RetrievedDocument, str]] = []
+        for doc in hits or []:
+            metadata = getattr(doc, "metadata", None) or {}
+            file_id = str(metadata.get("file_id") or "")
+            if file_id not in allowed:
+                continue
+            considered.append((file_id, doc, doc.text or ""))
+
+        identifiers = row_identifier_terms(
+            question,
+            [text for _, _, text in considered],
+            max_chunks=max_chunks,
+        )
+        if not identifiers:
+            return []
+
+        picked: list[RetrievedDocument] = []
+        seen_files: set[str] = set()
+        for file_id, doc, text in considered:
+            if file_id in seen_files:
+                continue
+            if not any(
+                cell_names_entity(line, term)
+                for line in text.splitlines()
+                for term in identifiers
+            ):
+                continue
+            picked.append(RetrievedDocument(**doc.to_dict(), score=NO_SIMILARITY))
+            seen_files.add(file_id)
+            if len(picked) >= limit:
+                break
+
+        routed = {str(file_id) for file_id in in_scope}
+        outside = {file_id for file_id in seen_files if file_id not in routed}
+        if outside:
+            print(
+                f"entity row lookup: {len(picked)} chunk(s), "
+                f"{len(outside)} from a file the route dropped"
+            )
+        return picked
+
+    @staticmethod
+    def _promote_entity_rows(
+        docs: list[RetrievedDocument], row_docs: list[RetrievedDocument]
+    ) -> list[RetrievedDocument]:
+        """Put the entity rows first, without duplicating a chunk already there."""
+        if not row_docs:
+            return docs
+        promoted = {doc.doc_id for doc in row_docs}
+        return list(row_docs) + [doc for doc in docs if doc.doc_id not in promoted]
 
     def generate_relevant_scores(
         self, query: str, documents: list[RetrievedDocument]

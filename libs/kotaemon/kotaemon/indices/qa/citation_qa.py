@@ -27,7 +27,7 @@ from .utils import find_text
 try:
     from ktem.llms.manager import llms
     from ktem.reasoning.prompt_optimization.mindmap import CreateMindmapPipeline
-    from ktem.utils.render import Render
+    from ktem.utils.render import Render, relevance_score_of
 except ImportError:
     raise ImportError("Please install `ktem` to use this component")
 
@@ -378,11 +378,15 @@ class AnswerWithContextPipeline(BaseComponent):
 
         print("Got {} cited docs".format(len(with_citation)))
 
+        # Order the uncited chunks the way the panel scores them. Sorting on
+        # ``llm_trulens_score`` (always 0.0 unless the LLM judge is on) left the order
+        # to a *set* iteration: the panel showed relevant and unrelated chunks
+        # interleaved, and their displayed scores jumped up and down (MODIFICATIONS
+        # §5.23). The doc id is the tie-break so two runs show the same order.
         sorted_not_detected_items_with_scores = [
-            (id_, id2docs[id_].metadata.get("llm_trulens_score", 0.0))
-            for id_ in not_detected
+            (id_, relevance_score_of(id2docs[id_])) for id_ in not_detected
         ]
-        sorted_not_detected_items_with_scores.sort(key=lambda x: x[1], reverse=True)
+        sorted_not_detected_items_with_scores.sort(key=lambda x: (-x[1], x[0]))
 
         for id_, _ in sorted_not_detected_items_with_scores:
             doc = id2docs[id_]

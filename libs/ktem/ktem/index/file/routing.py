@@ -94,7 +94,10 @@ def rank_files(
     if not scored:
         return []
 
-    scored.sort(key=lambda item: item[1], reverse=True)
+    # Ties are broken by file id: two runs of the same question must route to the same
+    # files, or a measurement moves by one question depending on the process (measured
+    # on the 27-question set, MODIFICATIONS §5.22).
+    scored.sort(key=lambda item: (-item[1], item[0]))
     best = scored[0][1]
     cap = max(int(top_m), 1)
     floor = min(max(int(min_files), 1), cap)

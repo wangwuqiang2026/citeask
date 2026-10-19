@@ -23,6 +23,7 @@ from kotaemon.abstain import (
     best_similarity,
     entity_terms,
     line_is_a_cell,
+    named_file_evidence,
     row_looks_tabular,
     should_refuse,
     specific_term_evidence,
@@ -352,6 +353,85 @@ def test_abstain_events_answers_a_vertical_table_below_the_threshold(monkeypatch
 
     events = abstain_events(
         "李明辉进省赛了吗", [row_doc(0.412, text=VERTICAL_ROW)], threshold=0.45
+    )
+
+    assert events == []
+
+
+# --------------------------------------------------------------------------- #
+# a question that names the file (§5.22): source code answers at 0.34-0.39
+# --------------------------------------------------------------------------- #
+def file_doc(score, name, text="def gaussian(X, num_centers=10, sigma=1.0): ..."):
+    return SimpleNamespace(score=score, text=text, metadata={"file_name": name})
+
+
+def test_a_question_that_names_the_file_is_answered_below_the_threshold():
+    """Measured: the code file against a Chinese question scores 0.34-0.39 (§5.22)."""
+    documents = [file_doc(0.35, "代码.txt"), file_doc(0.30, "通知.docx")]
+
+    assert named_file_evidence("代码文件夹描述了什么算法", documents) is True
+    assert (
+        should_refuse(
+            [0.35, 0.30],
+            0.45,
+            documents=documents,
+            question="代码文件夹描述了什么算法",
+            term_floor=0.33,
+        )
+        is False
+    )
+
+
+def test_the_file_name_test_does_not_fire_by_accident():
+    documents = [file_doc(0.35, "计算机学院关于校级奖学金评定官网通知.docx")]
+
+    assert named_file_evidence("奖学金怎么评", documents) is False
+    assert (
+        should_refuse(
+            [0.35],
+            0.45,
+            documents=documents,
+            question="奖学金怎么评",
+            term_floor=0.33,
+        )
+        is True
+    )
+
+
+def test_a_file_that_was_not_retrieved_cannot_vouch_for_anything():
+    documents = [file_doc(0.35, "通知.docx")]
+
+    assert named_file_evidence("代码里用了什么算法", documents) is False
+
+
+def test_a_stem_too_short_to_identify_is_ignored():
+    assert named_file_evidence("a 是什么", [file_doc(0.35, "a.txt")]) is False
+    assert named_file_evidence("", [file_doc(0.35, "代码.txt")]) is False
+
+
+def test_naming_the_file_does_not_answer_a_very_weak_match():
+    """0.30 is too weak even when the question names the file."""
+    documents = [file_doc(0.30, "代码.txt")]
+
+    assert (
+        should_refuse(
+            [0.30],
+            0.45,
+            documents=documents,
+            question="代码里用了什么算法",
+            term_floor=0.33,
+        )
+        is True
+    )
+
+
+def test_abstain_events_answers_a_named_file_below_the_threshold(monkeypatch):
+    monkeypatch.setattr(simple_module, "abstain_threshold", lambda: 0.45)
+    monkeypatch.setattr(simple_module, "abstain_term_floor", lambda: 0.33)
+    monkeypatch.setattr(simple_module, "log_abstention", lambda *a: None)
+
+    events = abstain_events(
+        "这个代码用了什么算法", [file_doc(0.39, "代码.txt")], threshold=0.45
     )
 
     assert events == []

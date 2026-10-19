@@ -64,6 +64,60 @@ def get_header(doc: RetrievedDocument) -> str:
     return header.strip()
 
 
+def _number(value) -> float:
+    """A metadata score as a float; 0.0 for anything missing or malformed."""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def has_rerank_score(doc: RetrievedDocument) -> bool:
+    """Whether a reranker scored this chunk (even if the score is 0.0)."""
+    metadata = getattr(doc, "metadata", None) or {}
+    return any(
+        metadata.get(key) is not None for key in ("reranking_score", "rerank_score")
+    )
+
+
+def reranking_score_of(doc: RetrievedDocument) -> float:
+    """The reranker's score: Cohere/Voyage/tei write ``reranking_score``, the local
+    lexical reranker writes ``rerank_score``.
+
+    Reading only the first key made the evidence panel show ``[得分: 0.0]`` and
+    ``相关性分数: 0.0`` for every chunk whenever the local reranker was the configured
+    one — the panel claimed zero relevance for chunks the reranker had ranked, so a
+    retrieval miss was indistinguishable from an empty store (MODIFICATIONS §5.21).
+    """
+    metadata = getattr(doc, "metadata", None) or {}
+    for key in ("reranking_score", "rerank_score"):
+        if metadata.get(key) is not None:
+            return round(_number(metadata[key]), 2)
+    return 0.0
+
+
+def relevance_score_of(doc: RetrievedDocument) -> float:
+    """The score the evidence panel calls relevance: what actually ranked this chunk.
+
+    The LLM judge wins when it ran (it is the only one that read the answer), then the
+    reranker — **including a 0.0**, because that is the reranker's verdict — then the
+    vector similarity when no reranker ran at all.
+
+    Falling back from a 0.0 rerank score to the vector similarity mixed two scales: a
+    chunk the reranker had rejected (0.0) was shown a 0.31 similarity while the chunk
+    that matched the question was shown 0.29, so relevant and unrelated chunks looked
+    the same (MODIFICATIONS §5.23).
+    """
+    metadata = getattr(doc, "metadata", None) or {}
+    llm_score = _number(metadata.get("llm_trulens_score"))
+    if llm_score > 0:
+        return round(llm_score, 2)
+    if has_rerank_score(doc):
+        return reranking_score_of(doc)
+    similarity = _number(getattr(doc, "score", 0.0))
+    return round(similarity, 2) if similarity > 0 else 0.0
+
+
 class Render:
     """Default text rendering into HTML for the UI"""
 
@@ -75,6 +129,22 @@ class Render:
             f"<details class='evidence' {o}><summary>"
             f"{header}</summary>{content}"
             "</details><br>"
+        )
+
+    @staticmethod
+    def empty_state(title: str, hint: str = "") -> str:
+        """Render the placeholder shown by a panel that has nothing to display yet.
+
+        Used by the information panel before the first answer (and when an answer
+        carried no evidence), so an empty panel explains itself instead of
+        appearing broken.
+        """
+        hint_html = f'<div class="empty-state-hint">{hint}</div>' if hint else ""
+        return (
+            '<div class="empty-state">'
+            f'<div class="empty-state-title">{title}</div>'
+            f"{hint_html}"
+            "</div>"
         )
 
     @staticmethod
@@ -205,16 +275,8 @@ class Render:
             vectorstore_score = str(round(doc.score, 2))
             text_search_str = "<br>"
 
-        llm_reranking_score = (
-            round(doc.metadata["llm_trulens_score"], 2)
-            if doc.metadata.get("llm_trulens_score") is not None
-            else 0.0
-        )
-        reranking_score = (
-            round(doc.metadata["reranking_score"], 2)
-            if doc.metadata.get("reranking_score") is not None
-            else 0.0
-        )
+        llm_reranking_score = round(_number(doc.metadata.get("llm_trulens_score")), 2)
+        reranking_score = reranking_score_of(doc)
         item_type = doc.metadata.get("type", "").capitalize()
         item_type_prefix = f"{item_type} from " if item_type else ""
 
@@ -224,12 +286,7 @@ class Render:
             # the space is added here: a translation is stripped by clean_translation
             item_type_prefix = tr("{} from").format(tr(item_type)) + " "
 
-        if llm_reranking_score > 0:
-            relevant_score = llm_reranking_score
-        elif reranking_score > 0:
-            relevant_score = reranking_score
-        else:
-            relevant_score = 0.0
+        relevant_score = relevance_score_of(doc)
 
         rendered_score = Render.collapsible(
             header=f"<b>&emsp;{tr('Relevance score')}</b>: {relevant_score:.1f}",
@@ -253,9 +310,19 @@ class Render:
         else:
             rendered_doc_content = Render.table(text)
 
+        # The relevance value stays inside the summary: that is the only number the
+        # collapsed row shows, and the evidence tests read it from there. It is a
+        # chip now (label + value) so the number cannot be mistaken for part of the
+        # file name printed next to it.
+        chip = (
+            '<span class="chip">'
+            f'<span class="chip-label">{tr("Relevance score")}</span>'
+            f'<span class="chip-value">{relevant_score}</span>'
+            "</span>"
+        )
         rendered_header = Render.preview(
-            f"<i>{item_type_prefix}{get_header(doc)}</i>"
-            f" {tr('[score: {}]').format(llm_reranking_score)}",
+            f'<span class="meta"><i>{item_type_prefix}{get_header(doc)}</i></span>'
+            f"{chip}",
             doc,
             highlight_text=highlight_text,
         )

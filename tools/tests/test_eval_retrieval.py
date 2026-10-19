@@ -300,6 +300,74 @@ def test_abstain_summary_reports_both_sides_of_the_gate():
     assert summary["threshold"] == 0.45
 
 
+def test_a_question_that_names_the_retrieved_file_is_not_scored_as_abstained():
+    """A code file answers a Chinese question at 0.34-0.39 (§5.22); the evaluator has to
+    score that decision the same way the chat gate does."""
+    results = evaluate(
+        [
+            {
+                "id": "q-code",
+                "question": "细则里写了什么算法",
+                "expect_pages": ["1"],
+            }
+        ],
+        [FakeRetriever([make_doc("1", 0.35, "def gaussian(X): ...")])],
+        ["file-1"],
+        "细则.pdf",
+        k=5,
+        abstain_threshold=0.45,
+        abstain_term_floor=0.33,
+    )
+
+    result = results[0]
+    assert result["file_evidence"] is True
+    assert result["abstained"] is False
+
+
+def test_a_question_that_does_not_name_the_file_is_still_abstained():
+    results = evaluate(
+        [
+            {
+                "id": "q-code",
+                "question": "食堂几点开门？",
+                "expect_answer": False,
+            }
+        ],
+        [FakeRetriever([make_doc("1", 0.35, "def gaussian(X): ...")])],
+        ["file-1"],
+        "细则.pdf",
+        k=5,
+        abstain_threshold=0.45,
+        abstain_term_floor=0.33,
+    )
+
+    result = results[0]
+    assert result["file_evidence"] is False
+    assert result["abstained"] is True
+
+
+def test_abstain_summary_honours_the_named_file_evidence():
+    """The threshold sweep must use the same structural overrides as the app."""
+    results = [
+        {
+            "abstain_case": False,
+            "retrieved": [{"score": 0.35}],
+            "file_evidence": True,
+        },
+        {
+            "abstain_case": False,
+            "retrieved": [{"score": 0.35}],
+            "term_evidence": False,
+            "file_evidence": False,
+        },
+    ]
+
+    summary = abstain_summary(results, threshold=0.45, term_floor=0.33)
+
+    # the named file is answered down to the floor; the other 0.35 is refused
+    assert summary["false_reject_rate"] == 0.5
+
+
 def test_abstain_summary_without_no_answer_questions_reports_none():
     summary = abstain_summary(
         [{"abstain_case": False, "retrieved": [{"score": 0.8}]}], threshold=0.45

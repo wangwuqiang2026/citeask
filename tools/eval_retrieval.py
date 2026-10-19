@@ -48,7 +48,12 @@ import time
 from pathlib import Path
 from typing import Any, Iterable
 
-from kotaemon.abstain import best_similarity, should_refuse, specific_term_evidence
+from kotaemon.abstain import (
+    best_similarity,
+    named_file_evidence,
+    should_refuse,
+    specific_term_evidence,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -171,6 +176,9 @@ def all_doc_ids(index: Any, user_id: str | None) -> list[str]:
     statement = select(Source.id)
     if index.config.get("private", False):
         statement = statement.where(Source.user == user_id)
+    # An explicit order: the selection order decides the per-file pass and equal-score
+    # candidates, so the same command has to walk the files in the same order every run.
+    statement = statement.order_by(Source.name)
     with Session(engine) as session:
         return [row[0] for row in session.execute(statement).all()]
 
@@ -267,6 +275,7 @@ def evaluate(
         top_score = top_score_of(docs)
         abstain_case = is_abstain_case(question)
         term_evidence = specific_term_evidence(question["question"], docs)
+        file_evidence = named_file_evidence(question["question"], docs)
 
         rank = None
         if not abstain_case:
@@ -295,6 +304,7 @@ def evaluate(
                 "abstain_case": abstain_case,
                 "top_score": round(top_score, 3),
                 "term_evidence": term_evidence,
+                "file_evidence": file_evidence,
                 "abstained": should_refuse(
                     scores_of(docs),
                     abstain_threshold,
@@ -360,8 +370,9 @@ def abstain_summary(
     thresholds can be compared without running retrieval again.
 
     ``term_floor`` mirrors the app: a question whose *rare entity term* appears in a
-    retrieved chunk is answered when the best score reaches this floor, even below the
-    threshold (a dense table row answers at a low similarity, MODIFICATIONS §5.8).
+    retrieved chunk — or that names one of the retrieved files — is answered when the
+    best score reaches this floor, even below the threshold (a dense table row answers
+    at a low similarity, MODIFICATIONS §5.8; so does a code file, §5.22).
     """
     abstain_cases = [r for r in results if r.get("abstain_case")]
     answerable = [r for r in results if not r.get("abstain_case")]
@@ -370,7 +381,8 @@ def abstain_summary(
         scores = [a.get("score", 0.0) for a in result.get("retrieved") or []]
         if not should_refuse(scores, threshold):
             return False
-        if term_floor <= 0 or not result.get("term_evidence"):
+        structural = bool(result.get("term_evidence") or result.get("file_evidence"))
+        if term_floor <= 0 or not structural:
             return True
         best = best_similarity(scores)
         return best is None or best < term_floor

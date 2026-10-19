@@ -29,6 +29,17 @@ cell per line) turns the same row into ``10`` / ``星河队`` / ``李明辉`` / 
 lines, where no single line has "fields" at all and the row test above can never match.
 The name standing alone on its line *is* the cell, so that layout counts as well
 (MODIFICATIONS §5.19) - prose lines are far too long to ever be a whole cell.
+
+Source code is the mirror image of a spreadsheet: it carries the answer, but a Chinese
+question is far from Python identifiers in the vector space (0.34-0.39 against 0.45-0.62
+for prose), so the prose threshold refuses questions about it. The structural signal
+there is the **file name**: a question that names the file is answered from that file
+down to the same floor (:func:`named_file_evidence`, MODIFICATIONS §5.22).
+
+Two of these rules are shared with retrieval: :func:`row_identifier_terms` (which terms
+of the question name a row rather than a topic) and :func:`cell_names_entity` (the
+whole-cell match the file retriever uses when it promotes the row into the context,
+MODIFICATIONS §5.21).
 """
 
 from __future__ import annotations
@@ -47,7 +58,17 @@ DEFAULT_TERM_FLOOR = 0.33
 #: Shortest CJK run (and latin token) that reads as an entity rather than a common word.
 ENTITY_TERM_LENGTH = 3
 
+#: Longest CJK-only cell a 3-character window may match inside: a name/team cell is
+#: short (``欧阳佳饴``), a sentence or a labelled field is not.
+MAX_CELL_LENGTH = 6
+
+#: How often a term may repeat inside one chunk and still read as a row value. An award
+#: column (``三等奖`` ten times in one OCR chunk) repeats; a name appears once
+#: (MODIFICATIONS §5.21).
+MAX_CELL_REPEATS = 2
+
 _CJK_RUN = re.compile(r"[\u4e00-\u9fff]+")
+_CJK_ONLY = re.compile(r"^[\u4e00-\u9fff]+$")
 _LATIN_TOKEN = re.compile(r"[a-z0-9]+")
 _FIELD_SPLIT = re.compile(r"[,\t]")
 _HAS_DIGIT = re.compile(r"\d")
@@ -133,6 +154,46 @@ def line_is_a_cell(line: str, term: str) -> bool:
     return bool(stripped) and stripped == term
 
 
+def cell_names_entity(
+    line: str, term: str, max_cell_length: int = MAX_CELL_LENGTH
+) -> bool:
+    """True when ``term`` sits in a cell: a whole field, or a window of a short one.
+
+    The row-lookup pass needs a higher bar than :func:`text_names_entity`: a mismatch
+    there puts a *wrong* chunk into the context, while routing merely widens the file
+    scope. Two layouts must match:
+
+    * a field of a row: ``24405010135 王务强 75.45 …`` splits into fields, one of which is
+      the name;
+    * a cell of a vertical table (one cell per line, as OCR emits it): the line itself.
+
+    A field such as ``一等奖学金:综合测评在班上前5名以内`` is prose that merely contains the
+    window ``等奖学`` of ``三等奖学金`` — punctuation disqualifies it. A 3-character window
+    also has to match *inside* a longer but still short CJK cell, because the question
+    ``欧阳佳饴的社会实践`` yields only ``欧阳佳``/``阳佳饴`` and never the whole name
+    (MODIFICATIONS §5.21).
+    """
+    body = str(line or "").strip()
+    needle = str(term or "").strip().lower()
+    if not body or not needle:
+        return False
+
+    for field in re.split(r"[,\t\s\u3000]+", body):
+        piece = field.strip(_CELL_PADDING)
+        if not piece:
+            continue
+        if piece.lower() == needle:
+            return True
+        if (
+            len(needle) >= ENTITY_TERM_LENGTH
+            and len(piece) <= max_cell_length
+            and _CJK_ONLY.match(piece)
+            and needle in piece.lower()
+        ):
+            return True
+    return False
+
+
 def text_names_entity(
     question: str, text: str, max_cell_length: int = 20, min_term_length: int = 3
 ) -> bool:
@@ -172,6 +233,64 @@ def text_names_entity(
         ):
             return True
     return False
+
+
+def _text_of(item) -> str:
+    """Text of a document or of a plain string, lowercased (empty for anything else)."""
+    raw = item if isinstance(item, str) else getattr(item, "text", "")
+    return str(raw or "").lower()
+
+
+def row_identifier_terms(
+    question: str,
+    documents: Iterable,
+    max_chunks: int = 0,
+    max_cell_repeats: int = MAX_CELL_REPEATS,
+) -> set[str]:
+    """Terms of the question that name a *row*, not a topic.
+
+    A row lookup needs the term that identifies the row. Judging that on "how often the
+    term appears in the full-text hits" is fragile in both directions (MODIFICATIONS
+    §5.21): a student who is also the class's 汇总人 appears in five chunks and stopped
+    counting, while ``三等奖`` appears in seven and kept counting. What separates them is
+    *how* the term appears:
+
+    * a row identifier occupies a **cell** (:func:`cell_names_entity`), once or twice
+      per chunk — ``24405010135 王务强 75.45 …``, ``万物兴`` on its own line;
+    * a topic word is prose (``奖学金`` inside a sentence) or a **column value** that
+      repeats down the chunk (``三等奖`` ten times in one OCR chunk).
+
+    ``max_cell_repeats`` is the repetition bar; ``max_chunks`` is an optional cap on
+    how many chunks may carry the cell (``0`` = no cap: a student who appears in ten
+    tables is still a row identifier, and the caller caps how many of them it promotes).
+
+    ``documents`` may be documents or plain strings.
+    """
+    texts = [text for text in (_text_of(item) for item in documents) if text]
+    if not texts:
+        return set()
+
+    cap = max(int(max_chunks), 0)
+    repeats_cap = max(int(max_cell_repeats), 1)
+    found: set[str] = set()
+    for term in entity_terms(question):
+        if len(term) < ENTITY_TERM_LENGTH:
+            continue
+        chunks = 0
+        worst = 0
+        for text in texts:
+            repeats = sum(
+                1 for line in text.splitlines() if cell_names_entity(line, term)
+            )
+            if repeats:
+                chunks += 1
+                worst = max(worst, repeats)
+        if not chunks or worst > repeats_cap:
+            continue
+        if cap and chunks > cap:
+            continue
+        found.add(term)
+    return found
 
 
 def specific_term_evidence(
@@ -214,6 +333,45 @@ def specific_term_evidence(
     return False
 
 
+#: Shortest file stem that can be recognised inside a question ("代码" in 代码.txt).
+MIN_NAMED_FILE_LENGTH = 2
+
+_EXTENSION = re.compile(r"\.[A-Za-z0-9]{1,6}$")
+
+
+def _squash(text: str) -> str:
+    """Lowercase and drop everything but letters/digits (CJK counts as a letter)."""
+    return "".join(ch for ch in str(text or "").lower() if ch.isalnum())
+
+
+def named_file_evidence(question: str, documents: Iterable) -> bool:
+    """True when the question names a file that one of the retrieved chunks is from.
+
+    A question about a *document* is answered by that document even when the similarity
+    is low: source code against a Chinese question scores 0.34-0.39 while prose scores
+    0.45-0.62, so the prose threshold refuses the very questions that named their source
+    ("代码里用了什么算法" at 0.39, "代码文件夹描述了什么算法" at 0.35 — measured,
+    MODIFICATIONS §5.22).
+
+    The test is strict on purpose: the file's stem, with whitespace and punctuation
+    removed, must appear in the question, so ``代码`` matches only a file called
+    ``代码.txt`` and a long descriptive name never matches by accident.
+    """
+    normalized_question = _squash(question)
+    if not normalized_question:
+        return False
+
+    for item in documents or []:
+        metadata = getattr(item, "metadata", None) or {}
+        name = metadata.get("file_name")
+        if not name:
+            continue
+        stem = _squash(_EXTENSION.sub("", str(name)))
+        if len(stem) >= MIN_NAMED_FILE_LENGTH and stem in normalized_question:
+            return True
+    return False
+
+
 def should_refuse(
     scores: Iterable[float],
     threshold: float,
@@ -228,9 +386,10 @@ def should_refuse(
         threshold: minimum similarity that counts as evidence; ``<= 0`` disables
             the similarity check
         documents: the retrieved documents; when given together with ``question``, a
-            rare entity term in one of them lowers the bar to ``term_floor``
-        question: the user's question, used for the entity-term check
-        term_floor: lowest similarity that still counts once a rare term matched
+            rare entity term in one of them — or a file the question names — lowers the
+            bar to ``term_floor``
+        question: the user's question, used for the entity-term / file-name checks
+        term_floor: lowest similarity that still counts once the evidence is structural
     """
     scores = list(scores)
     if not scores:
@@ -245,6 +404,9 @@ def should_refuse(
 
     floor = DEFAULT_TERM_FLOOR if term_floor is None else float(term_floor)
     if documents is not None and question and floor > 0 and best >= floor:
-        if specific_term_evidence(question, list(documents)):
+        retrieved = list(documents)
+        if specific_term_evidence(question, retrieved):
+            return False
+        if named_file_evidence(question, retrieved):
             return False
     return True

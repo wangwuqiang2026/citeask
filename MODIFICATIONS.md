@@ -1135,7 +1135,7 @@ uv sync --python 3.10 --no-install-package llama-cpp-python
 > 在开源 RAG 代码库上完成中文文档问答的产品化与全栈改造：修复三类"配置了但没生效"的数据入口缺陷，
 > 建立只跑检索层、零 token 成本的评测并据此把单文件 Hit@1 从 59.3% 提到 88.9%，
 > 同时把 Gradio 单页替换为 React 18 + FastAPI（39 个接口、SSE、57 个 API 测试）。
-> 自有提交 46 个、源文件改动 343 个（不含构建产物与 lock）。
+> 自有提交 48 个、源文件改动 343 个（不含构建产物与 lock）。
 
 ### 8.2 分点版本（STAR）
 
@@ -1166,7 +1166,7 @@ uv sync --python 3.10 --no-install-package llama-cpp-python
 
 ### 8.3 与上游的边界（面试必须能说清）
 
-仓库包含上游 kotaemon 的代码，上游提供了 RAG 骨架与经典 Gradio 页面；本仓库的 47 个提交、
+仓库包含上游 kotaemon 的代码，上游提供了 RAG 骨架与经典 Gradio 页面；本仓库的 48 个提交、
 343 个源文件改动集中在上面的四块（检索/OCR/评测/全栈/工程化）。被问"哪部分是你写的"时，
 直接按 commit 或 `MODIFICATIONS.md` 的文件清单回答，不要声称上游框架也是自己从零写的。
 简历里只写"在开源 RAG 代码库上完成..."，把重点放在可验证的改造与数字上。

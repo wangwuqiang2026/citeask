@@ -2,6 +2,13 @@
 
 [![tests](https://github.com/wangwuqiang2026/citeask/actions/workflows/tests.yaml/badge.svg)](https://github.com/wangwuqiang2026/citeask/actions/workflows/tests.yaml)
 
+[![rag](https://img.shields.io/badge/rag-RAG-blue)](https://github.com/wangwuqiang2026/citeask)
+[![document-qa](https://img.shields.io/badge/document--qa-QA-green)](https://github.com/wangwuqiang2026/citeask)
+[![fastapi](https://img.shields.io/badge/FastAPI-0.115-009688)](https://github.com/wangwuqiang2026/citeask)
+[![react](https://img.shields.io/badge/React-18-61DAFB)](https://github.com/wangwuqiang2026/citeask)
+[![ocr](https://img.shields.io/badge/OCR-PP--OCR-orange)](https://github.com/wangwuqiang2026/citeask)
+[![rag-evaluation](https://img.shields.io/badge/RAG-eval-yellow)](https://github.com/wangwuqiang2026/citeask)
+
 文档问答系统：**扫描件与长文档可直接入索引，答案逐页可溯源，检索效果用评测驱动迭代。**
 
 > Document QA with OCR-aware ingestion, page-level citations, and an evaluated retrieval pipeline.
@@ -20,7 +27,7 @@
 
 ## 这个仓库交付了什么
 
-不是"把开源项目跑起来"：仓库累计 **47 个提交、343 个源文件改动**（不含构建产物与 lock），围绕一条完整的文档问答链路做了四块工作：
+不是"把开源项目跑起来"：仓库累计 **48 个提交、343 个源文件改动**（不含构建产物与 lock），围绕一条完整的文档问答链路做了四块工作：
 
 - **数据入口**：修复默认配置下检索被静默跳过、扫描件正文未入库、`.docx` 索引失败三类缺陷；新增按页决策的 OCR 抽取器。
 - **检索与评测**：自建只跑检索层、零 token 成本的评测，用同一套题驱动切块、重排、拒答闸门和向量模型选型。

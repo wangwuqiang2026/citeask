@@ -21,11 +21,11 @@ web/
 │  │  ├─ app/            AppShell、Rail、命令面板、PageFrame（非聊天页的统一页头/滚动区）
 │  │  ├─ chat/           会话侧栏、消息流、Composer、证据抽屉、设置弹层、文件选择
 │  │  ├─ files/          文件表、上传弹窗、分块抽屉、分组面板、确认弹窗
-│  │  ├─ settings/       schema 驱动的设置控件（text/number/checkbox/dropdown/radio/checkboxgroup）
+│  │  ├─ settings/       schema 驱动的设置控件 + 账户改密卡片
 │  │  └─ ui/             手写 shadcn 风格基元（Button/Input/Dialog/Dropdown/Select/Switch/Tooltip…）
 │  ├─ hooks/             react-query 封装、SSE 聊天状态机、媒体查询
 │  ├─ lib/               api / SSE 解析 / 引用解析 / i18n / 主题 / 工具 / mock
-│  ├─ pages/             ChatPage、LoginPage、FilesPage、SettingsPage、ClassicPage（M3 占位）
+│  ├─ pages/             ChatPage、LoginPage、FilesPage、SettingsPage、ResourcesPage、HelpPage
 │  └─ stores/            zustand：ui（主题/语言/抽屉）、chat-settings（推理/模型/引用…）
 ├─ dist/                 构建产物（提交入库；index.html + 哈希 assets）
 ├─ index.html            含首绘前主题脚本（防白闪）
@@ -107,6 +107,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build_web.ps1 -CopyT
   `GET /files/{id}/chunks?type=`、`GET /files/{id}/download`、`GET/POST /groups`、
   `PATCH/DELETE /groups/{id}`
 - 设置：`GET /settings`、`GET /settings/schema`（分组 + 字段类型/选项/默认值）、`PUT /settings`
+- 账户与 M3：`POST /auth/password`（改自己的密码）、`GET /resources`（索引 + LLM/向量/重排/MCP
+  只读清单，不含 spec）、`GET /help`（随包 about/usage 文档）、`GET/POST /users`、
+  `PATCH/DELETE /users/{id}`（仅管理员；不能删自己 / 降级自己 / 删最后一个管理员）
 
 SSE 事件：`start`（可带 `warning`）、`token`、`reset`、`evidence`、`mindmap`、`plot`、
 `title`、`suggestions`、`done`、`error`。实现细节：
@@ -135,7 +138,12 @@ $env:VITE_USE_MOCK = "1"; npm run dev
 
 M2：`/files`（搜索、原生上传/URL、文件表与行操作、分块抽屉、分组 CRUD）与
 `/settings`（schema 驱动表单、分组导航、吸底保存与未保存提示）已替换占位页。
-`/resources`、`/help` 仍为“经典界面”卡片（M3）。
+
+M3：`/resources`（索引集合 / 模型资源只读视图 / 用户管理）与 `/help`（关于 + 使用指南）已是
+真页面，设置页顶部新增「账户」改密卡片；`ClassicPage` / `PageShell` 占位实现已删除。
+
+仍未迁移：Gradio 的模型供应商编辑表单、索引新增/删除、MCP 配置（都在 `/legacy`，因为依赖重启
+或属于长表单），以及经典界面的登录页。
 
 限制：
 

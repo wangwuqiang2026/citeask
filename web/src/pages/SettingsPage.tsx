@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { PageFrame } from "@/components/app/PageFrame";
+import { AccountCard } from "@/components/settings/AccountCard";
 import { SettingsField } from "@/components/settings/SettingsField";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -189,7 +190,9 @@ export function SettingsPage() {
           {t("settingsPage.empty")}
         </p>
       ) : (
-        <div className="flex flex-col gap-6 lg:flex-row">
+        <div className="flex flex-col gap-6">
+          <AccountCard />
+          <div className="flex flex-col gap-6 lg:flex-row">
           <nav
             aria-label={t("settingsPage.title")}
             className="shrink-0 lg:w-56"
@@ -246,6 +249,7 @@ export function SettingsPage() {
               </>
             ) : null}
           </section>
+          </div>
         </div>
       )}
 

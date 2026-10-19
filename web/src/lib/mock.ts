@@ -152,6 +152,7 @@ const nextId = () => `demo-${++sequence}`;
 
 const META: Meta = {
   app: { name: "citeask", version: "0.12.0", language: "zh" },
+  user: { id: "demo", username: "demo", admin: true },
   features: {
     user_management: false,
     chat_suggestion: true,

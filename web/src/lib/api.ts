@@ -10,12 +10,15 @@ import type {
   FileGroupItem,
   FileListResponse,
   GroupListResponse,
+  HelpPayload,
   Meta,
+  ResourcesPayload,
   SendMessageBody,
   SettingsSchema,
   StreamHandlers,
   UploadHandlers,
   User,
+  UserPayload,
 } from "./types";
 
 /** Explicit opt-in mock for local UI work without a running backend. */
@@ -260,9 +263,63 @@ export const api = {
     await request<void>("/api/v1/auth/logout", { method: "POST" });
   },
 
+  /** Change the signed-in user's own password. */
+  async changePassword(
+    current_password: string,
+    new_password: string,
+  ): Promise<void> {
+    await request<void>("/api/v1/auth/password", {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ current_password, new_password }),
+    });
+  },
+
   async meta(): Promise<Meta> {
     if (USE_MOCK) return (await import("./mock")).mockApi.meta();
     return request<Meta>("/api/v1/meta");
+  },
+
+  /** Configured indices and model pools (read-only, for `/resources`). */
+  async getResources(): Promise<ResourcesPayload> {
+    return request<ResourcesPayload>("/api/v1/resources");
+  },
+
+  /** Bundled About / user-guide documents (read-only, for `/help`). */
+  async getHelp(): Promise<HelpPayload> {
+    return request<HelpPayload>("/api/v1/help");
+  },
+
+  /* ----------------------------------------------------------------- users */
+
+  async listUsers(): Promise<{ items: User[] }> {
+    return request<{ items: User[] }>("/api/v1/users");
+  },
+
+  async createUser(body: {
+    username: string;
+    password: string;
+    admin?: boolean;
+  }): Promise<User> {
+    return request<User>("/api/v1/users", {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify(body),
+    });
+  },
+
+  async updateUser(id: string | number, body: UserPayload): Promise<User> {
+    return request<User>(`/api/v1/users/${encodeURIComponent(String(id))}`, {
+      method: "PATCH",
+      headers: JSON_HEADERS,
+      body: JSON.stringify(body),
+    });
+  },
+
+  async deleteUser(id: string | number): Promise<void> {
+    await request<void>(`/api/v1/users/${encodeURIComponent(String(id))}`, {
+      method: "DELETE",
+    });
   },
 
   async listConversations(): Promise<{ items: ConversationSummary[] }> {

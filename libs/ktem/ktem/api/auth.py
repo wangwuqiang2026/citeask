@@ -49,6 +49,29 @@ def me(user: dict | None = Depends(optional_user)) -> dict:
     return {"user": user}
 
 
+class PasswordBody(BaseModel):
+    current_password: str
+    new_password: str
+
+
+@router.post("/password", status_code=204)
+def change_password(
+    body: PasswordBody, request: Request, user: dict = Depends(current_user)
+) -> Response:
+    """Change the signed-in user's own password."""
+    from ktem.services.users import UserService
+
+    try:
+        UserService(get_app(request)).change_password(
+            user["id"], body.current_password, body.new_password
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc.args[0])) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return Response(status_code=204)
+
+
 @router.get("/protected")
 def protected(user: dict = Depends(current_user)) -> dict:
     """Tiny probe used by tests to assert the auth dependency."""

@@ -11,9 +11,27 @@ from fastapi import FastAPI
 
 
 def install_routes(api: FastAPI) -> None:
-    from . import auth, chat, conversations, meta, settings
+    from . import (
+        auth,
+        chat,
+        conversations,
+        help,
+        meta,
+        resources,
+        settings,
+        users,
+    )
 
-    for module in (auth, meta, conversations, chat, settings):
+    for module in (
+        auth,
+        meta,
+        conversations,
+        chat,
+        settings,
+        users,
+        resources,
+        help,
+    ):
         api.include_router(module.router, prefix="/api/v1")
 
     try:

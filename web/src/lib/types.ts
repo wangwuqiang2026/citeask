@@ -99,6 +99,7 @@ export interface FeatureFlags {
 
 export interface Meta {
   app: { name: string; version: string; language: string };
+  user: User;
   features: FeatureFlags;
   indices: IndexInfo[];
   reasoning: ChoiceList;
@@ -218,4 +219,34 @@ export interface StreamHandlers {
   onSuggestions?: (payload: { items: string[] }) => void;
   onDone?: (payload: { message_id: string; name?: string | null }) => void;
   onError?: (payload: { message: string }) => void;
+}
+
+/* --------------------------------------------------------------- resources */
+
+/** One configured model pool entry; the vendor spec itself stays on the server. */
+export interface ModelResource {
+  name: string;
+  vendor: string;
+  model: string;
+  default: boolean;
+}
+
+export interface ResourcesPayload {
+  indices: IndexInfo[];
+  llms: ModelResource[];
+  embeddings: ModelResource[];
+  rerankings: ModelResource[];
+  mcp: { name: string }[];
+}
+
+export interface HelpPayload {
+  app: { name: string; version: string; language: string };
+  about_md: string;
+  usage_md: string;
+}
+
+export interface UserPayload {
+  username?: string;
+  password?: string;
+  admin?: boolean;
 }

@@ -10,9 +10,10 @@ import { useT } from "@/lib/i18n";
 import { queryKeys } from "@/lib/query";
 import { applyTheme, watchSystemTheme } from "@/lib/theme";
 import { ChatPage } from "@/pages/ChatPage";
-import { ClassicPage } from "@/pages/ClassicPage";
 import { FilesPage } from "@/pages/FilesPage";
+import { HelpPage } from "@/pages/HelpPage";
 import { LoginPage } from "@/pages/LoginPage";
+import { ResourcesPage } from "@/pages/ResourcesPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { useUiStore } from "@/stores/ui";
 
@@ -130,26 +131,8 @@ export function App() {
           <Route path="/chat/:id" element={<ChatPage />} />
           <Route path="/files" element={<FilesPage />} />
           <Route path="/settings" element={<SettingsPage />} />
-          <Route
-            path="/resources"
-            element={
-              <ClassicPage
-                kind="resources"
-                titleKey="classic.resourcesTitle"
-                bodyKey="classic.resourcesBody"
-              />
-            }
-          />
-          <Route
-            path="/help"
-            element={
-              <ClassicPage
-                kind="help"
-                titleKey="classic.helpTitle"
-                bodyKey="classic.helpBody"
-              />
-            }
-          />
+          <Route path="/resources" element={<ResourcesPage />} />
+          <Route path="/help" element={<HelpPage />} />
           <Route path="/login" element={<Navigate to="/chat" replace />} />
           <Route path="*" element={<Navigate to="/chat" replace />} />
         </Route>

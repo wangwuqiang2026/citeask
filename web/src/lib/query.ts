@@ -25,4 +25,7 @@ export const queryKeys = {
     ["groups", String(indexId ?? "all")] as const,
   fileChunks: (fileId: string, type: string) =>
     ["file-chunks", fileId, type] as const,
+  resources: ["resources"] as const,
+  help: ["help"] as const,
+  users: ["users"] as const,
 };

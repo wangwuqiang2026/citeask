@@ -1,0 +1,522 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  CircleAlert,
+  ExternalLink,
+  FolderOpen,
+  Pencil,
+  Plus,
+  Trash2,
+} from "lucide-react";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
+
+import { PageFrame } from "@/components/app/PageFrame";
+import { ConfirmDialog } from "@/components/files/ConfirmDialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
+import { useMeta } from "@/hooks/use-api";
+import { api } from "@/lib/api";
+import { useT } from "@/lib/i18n";
+import { queryKeys } from "@/lib/query";
+import type { ModelResource, User } from "@/lib/types";
+import { cn } from "@/lib/utils";
+
+type TabKey = "indices" | "models" | "users";
+
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      className={cn(
+        "border-b-2 px-3 py-2 text-sm transition-colors",
+        active
+          ? "border-accent text-fg"
+          : "border-transparent text-muted hover:text-fg",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Section({
+  title,
+  count,
+  children,
+}: {
+  title: string;
+  count?: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="overflow-hidden rounded-md border border-border bg-panel">
+      <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
+        <h2 className="text-sm font-medium text-fg">{title}</h2>
+        {count !== undefined ? (
+          <span className="text-2xs text-subtle">{count}</span>
+        ) : null}
+      </header>
+      {children}
+    </section>
+  );
+}
+
+function PoolSection({
+  title,
+  rows,
+}: {
+  title: string;
+  rows: readonly Partial<ModelResource>[] & { name: string }[];
+}) {
+  const t = useT();
+  return (
+    <Section title={title} count={rows.length}>
+      {rows.length === 0 ? (
+        <p className="px-4 py-3 text-sm text-subtle">{t("resources.empty")}</p>
+      ) : (
+        <ul className="divide-y divide-border">
+          {rows.map((row) => (
+            <li
+              key={row.name}
+              className="flex flex-wrap items-center gap-2 px-4 py-2.5"
+            >
+              <span className="min-w-0 flex-1 truncate text-sm text-fg">
+                {row.name}
+              </span>
+              {row.default ? (
+                <Badge variant="accent">{t("resources.defaultBadge")}</Badge>
+              ) : null}
+              {row.vendor ? <Badge variant="outline">{row.vendor}</Badge> : null}
+              {row.model ? (
+                <span className="max-w-[45%] truncate text-2xs text-subtle">
+                  {row.model}
+                </span>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Section>
+  );
+}
+
+interface UserDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  user: User | null;
+  onSaved: () => void;
+}
+
+function UserDialog({ open, onOpenChange, user, onSaved }: UserDialogProps) {
+  const t = useT();
+  const editing = user !== null;
+
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [admin, setAdmin] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setUsername(user?.username ?? "");
+    setPassword("");
+    setConfirm("");
+    setAdmin(user?.admin ?? false);
+    setError(null);
+  }, [open, user]);
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      editing
+        ? api.updateUser(user.id, {
+            username,
+            admin,
+            ...(password ? { password } : {}),
+          })
+        : api.createUser({ username, password, admin }),
+    onSuccess: () => {
+      onOpenChange(false);
+      onSaved();
+    },
+    onError: (mutationError: Error) => setError(mutationError.message),
+  });
+
+  const submit = () => {
+    if (!username.trim()) {
+      setError(t("resources.username"));
+      return;
+    }
+    if (!editing && !password) {
+      setError(t("resources.passwordHelp"));
+      return;
+    }
+    if (password && password !== confirm) {
+      setError(t("resources.passwordMismatch"));
+      return;
+    }
+    mutation.mutate();
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>
+            {editing ? t("resources.editUser") : t("resources.createUser")}
+          </DialogTitle>
+          <DialogDescription>{t("resources.passwordHelp")}</DialogDescription>
+        </DialogHeader>
+
+        <div className="mt-2 space-y-3">
+          <label className="block space-y-1">
+            <span className="text-sm text-fg">{t("resources.username")}</span>
+            <Input
+              value={username}
+              onChange={(event) => setUsername(event.target.value)}
+              autoComplete="off"
+            />
+          </label>
+          <label className="block space-y-1">
+            <span className="text-sm text-fg">
+              {editing ? t("resources.password") : t("resources.password")}
+            </span>
+            <Input
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              autoComplete="new-password"
+              placeholder={editing ? t("resources.password") : ""}
+            />
+          </label>
+          <label className="block space-y-1">
+            <span className="text-sm text-fg">{t("resources.confirmPassword")}</span>
+            <Input
+              type="password"
+              value={confirm}
+              onChange={(event) => setConfirm(event.target.value)}
+              autoComplete="new-password"
+            />
+          </label>
+          <div className="flex items-center justify-between gap-4 py-1">
+            <span className="text-sm text-fg">{t("resources.admin")}</span>
+            <Switch checked={admin} onCheckedChange={setAdmin} />
+          </div>
+          {error ? (
+            <p role="alert" className="text-sm text-danger">
+              {error}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+            {t("common.cancel")}
+          </Button>
+          <Button variant="primary" onClick={submit} disabled={mutation.isPending}>
+            {t("resources.save")}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function UsersPanel() {
+  const t = useT();
+  const queryClient = useQueryClient();
+  const { data: meta } = useMeta();
+  const me = meta?.user ?? null;
+
+  const usersQuery = useQuery({
+    queryKey: queryKeys.users,
+    queryFn: () => api.listUsers(),
+  });
+
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
+
+  const remove = useMutation({
+    mutationFn: (user: User) => api.deleteUser(user.id),
+    onSuccess: (_data, user) => {
+      setDeleteTarget(null);
+      toast.success(t("resources.deleted"));
+      void queryClient.invalidateQueries({ queryKey: queryKeys.users });
+      if (user.id === me?.id) void queryClient.invalidateQueries();
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const users = usersQuery.data?.items ?? [];
+
+  return (
+    <>
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <p className="text-sm text-muted">{t("resources.usersHint")}</p>
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={() => {
+            setEditingUser(null);
+            setDialogOpen(true);
+          }}
+        >
+          <Plus className="h-4 w-4" aria-hidden="true" />
+          {t("resources.createUser")}
+        </Button>
+      </div>
+
+      {usersQuery.isLoading ? (
+        <div className="space-y-2">
+          <Skeleton className="h-10 w-full" />
+          <Skeleton className="h-10 w-full" />
+        </div>
+      ) : usersQuery.isError ? (
+        <p className="flex items-center gap-2 text-sm text-danger" role="alert">
+          <CircleAlert className="h-4 w-4" aria-hidden="true" />
+          {t("resources.loadError")}
+        </p>
+      ) : (
+        <Section title={t("resources.tabUsers")} count={users.length}>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-2xs uppercase tracking-wide text-subtle">
+                <th className="px-4 py-2 font-medium">{t("resources.username")}</th>
+                <th className="px-4 py-2 font-medium">{t("resources.role")}</th>
+                <th className="px-4 py-2 text-right font-medium">
+                  {t("resources.indexActions")}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((user) => {
+                const self = user.id === me?.id;
+                return (
+                  <tr key={user.id} className="border-b border-border last:border-0">
+                    <td className="px-4 py-2.5">
+                      <span className="text-fg">{user.username}</span>
+                      {self ? (
+                        <span className="ml-2 text-2xs text-subtle">
+                          ({t("account.title")})
+                        </span>
+                      ) : null}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      {user.admin ? (
+                        <Badge variant="accent">{t("resources.roleAdmin")}</Badge>
+                      ) : (
+                        <Badge variant="outline">{t("resources.roleUser")}</Badge>
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={t("resources.editUser")}
+                          onClick={() => {
+                            setEditingUser(user);
+                            setDialogOpen(true);
+                          }}
+                        >
+                          <Pencil className="h-4 w-4" aria-hidden="true" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={t("common.delete")}
+                          title={self ? t("resources.selfHint") : t("common.delete")}
+                          disabled={self}
+                          onClick={() => setDeleteTarget(user)}
+                        >
+                          <Trash2 className="h-4 w-4" aria-hidden="true" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </Section>
+      )}
+
+      <UserDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        user={editingUser}
+        onSaved={() => {
+          toast.success(editingUser ? t("resources.updated") : t("resources.created"));
+          setEditingUser(null);
+          void queryClient.invalidateQueries({ queryKey: queryKeys.users });
+        }}
+      />
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        title={t("resources.deleteTitle")}
+        description={t("resources.deleteDescription", {
+          name: deleteTarget?.username ?? "",
+        })}
+        pending={remove.isPending}
+        onConfirm={() => {
+          if (deleteTarget) remove.mutate(deleteTarget);
+        }}
+      />
+    </>
+  );
+}
+
+export function ResourcesPage() {
+  const t = useT();
+  const { data: meta } = useMeta();
+  const isAdmin = Boolean(meta?.user?.admin);
+  const [tab, setTab] = useState<TabKey>("indices");
+
+  const resourcesQuery = useQuery({
+    queryKey: queryKeys.resources,
+    queryFn: () => api.getResources(),
+    staleTime: 60_000,
+  });
+  const resources = resourcesQuery.data;
+
+  const openClassic = () => window.open("/legacy/", "_blank", "noopener");
+
+  return (
+    <PageFrame
+      wide
+      title={t("resources.title")}
+      subtitle={t("resources.subtitle")}
+      actions={
+        <Button variant="secondary" size="sm" onClick={openClassic}>
+          <ExternalLink className="h-4 w-4" aria-hidden="true" />
+          <span className="hidden sm:inline">{t("resources.openClassic")}</span>
+        </Button>
+      }
+      footer={
+        <div className="flex flex-wrap items-center gap-2 border-t border-border bg-panel px-5 py-2 text-2xs text-subtle">
+          <span>{t("resources.indexHint")}</span>
+          <button
+            type="button"
+            onClick={openClassic}
+            className="shrink-0 text-accent hover:underline"
+          >
+            {t("resources.openClassic")}
+          </button>
+        </div>
+      }
+    >
+      <div className="mb-4 flex gap-1 border-b border-border" role="tablist">
+        <TabButton active={tab === "indices"} onClick={() => setTab("indices")}>
+          {t("resources.tabIndices")}
+        </TabButton>
+        <TabButton active={tab === "models"} onClick={() => setTab("models")}>
+          {t("resources.tabModels")}
+        </TabButton>
+        {isAdmin ? (
+          <TabButton active={tab === "users"} onClick={() => setTab("users")}>
+            {t("resources.tabUsers")}
+          </TabButton>
+        ) : null}
+      </div>
+
+      {resourcesQuery.isLoading ? (
+        <div className="space-y-2">
+          <Skeleton className="h-12 w-full" />
+          <Skeleton className="h-24 w-full" />
+        </div>
+      ) : resourcesQuery.isError ? (
+        <p className="flex items-center gap-2 text-sm text-danger" role="alert">
+          <CircleAlert className="h-4 w-4" aria-hidden="true" />
+          {t("resources.loadError")}
+        </p>
+      ) : !resources ? null : tab === "indices" ? (
+        <Section title={t("resources.tabIndices")} count={resources.indices.length}>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-2xs uppercase tracking-wide text-subtle">
+                <th className="px-4 py-2 font-medium">{t("resources.indexName")}</th>
+                <th className="hidden px-4 py-2 font-medium sm:table-cell">
+                  {t("resources.indexId")}
+                </th>
+                <th className="px-4 py-2 font-medium">
+                  {t("resources.indexVisibility")}
+                </th>
+                <th className="px-4 py-2 text-right font-medium">
+                  {t("resources.indexFiles")}
+                </th>
+                <th className="px-4 py-2 text-right font-medium">
+                  {t("resources.indexActions")}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {resources.indices.map((index) => (
+                <tr key={String(index.id)} className="border-b border-border last:border-0">
+                  <td className="px-4 py-2.5 text-fg">{index.name}</td>
+                  <td className="hidden px-4 py-2.5 font-mono text-2xs text-subtle sm:table-cell">
+                    {String(index.id)}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    {index.private ? (
+                      <Badge variant="outline">{t("resources.private")}</Badge>
+                    ) : (
+                      <Badge variant="subtle">{t("resources.public")}</Badge>
+                    )}
+                  </td>
+                  <td className="px-4 py-2.5 text-right text-muted">
+                    {index.file_count}
+                  </td>
+                  <td className="px-4 py-2.5 text-right">
+                    <a
+                      href="/files"
+                      className="inline-flex items-center gap-1 text-xs text-accent hover:underline"
+                    >
+                      <FolderOpen className="h-3.5 w-3.5" aria-hidden="true" />
+                      {t("resources.viewFiles")}
+                    </a>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Section>
+      ) : tab === "models" ? (
+        <div className="space-y-4">
+          <p className="text-sm text-muted">{t("resources.modelsHint")}</p>
+          <PoolSection title={t("resources.llms")} rows={resources.llms} />
+          <PoolSection title={t("resources.embeddings")} rows={resources.embeddings} />
+          <PoolSection title={t("resources.rerankings")} rows={resources.rerankings} />
+          <PoolSection title={t("resources.mcp")} rows={resources.mcp} />
+        </div>
+      ) : (
+        <UsersPanel />
+      )}
+    </PageFrame>
+  );
+}

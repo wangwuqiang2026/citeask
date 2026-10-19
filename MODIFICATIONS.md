@@ -2333,6 +2333,48 @@ SSE 事件：`start`（可带 `warning`）→ `token`/`reset` → `evidence`（�
 `.env` 里 `USE_LOW_LLM_REQUESTS=true` 时 `meta.features.mindmap` 为 false，聊天设置里不显示
 思维导图开关（既有语义：低 LLM 调用模式不生成 mindmap），需要时把它设为 false 再重启。
 
+### 5.28 M3：资源、帮助与账户页面（2026-10-19）
+
+侧边栏里原本还是「请去经典界面」占位卡的两页，以及账户改密，都换成了真页面。
+
+**后端（新增 3 个路由模块 + 1 个服务）**
+
+| 文件 | 内容 |
+|---|---|
+| [services/users.py](libs/ktem/ktem/services/users.py) | 用户 CRUD 与改密；规则与经典页一致（用户名 3–32 位字母数字下划线、大小写不敏感；密码 ≥8 位且含大小写/数字/特殊字符）；删除自己、降级自己、删掉最后一个管理员都会被拒 |
+| [api/users.py](libs/ktem/ktem/api/users.py) | `GET/POST /users`、`PATCH/DELETE /users/{id}`，全部 `admin_required`（非管理员 403） |
+| [api/auth.py](libs/ktem/ktem/api/auth.py) | 新增 `POST /auth/password`：校验当前密码后改自己的密码 |
+| [api/resources.py](libs/ktem/ktem/api/resources.py) | `GET /resources`：索引（id/名称/私有/文件数）+ LLM/向量/重排/MCP 的**只读**清单 |
+| [api/help.py](libs/ktem/ktem/api/help.py) | `GET /help`：随包的 `docs/about[.zh].md` 与 `docs/usage[.zh].md`、版本号与界面语言 |
+
+资源清单只暴露 `name / vendor(类名) / model / default`，**不返回 spec**（里面有 API key），
+测试里直接断言响应文本不含 `api_key`。
+
+**前端**
+
+- [ResourcesPage.tsx](web/src/pages/ResourcesPage.tsx)：三个 tab——索引集合（表格 + 查看文件）、
+  模型资源（LLM/向量/重排/MCP 四组，默认项打「默认」徽标）、用户（管理员可见：新建/编辑/
+  重置密码/删除，删除自己被禁用）。索引与供应商的增删改仍需经典界面并重启，页脚与顶栏都给了入口。
+- [HelpPage.tsx](web/src/pages/HelpPage.tsx)：关于（版本/语言/项目主页/经典界面）+ 使用指南
+  markdown + 快捷键。
+- [AccountCard.tsx](web/src/components/settings/AccountCard.tsx)：设置页顶部的「账户」卡片，
+  当前密码 + 新密码 + 确认，前端只校验两次一致，其余规则交给后端。
+- 路由替换后 [ClassicPage.tsx](web/src/pages/ClassicPage.tsx) 与 [PageShell.tsx](web/src/components/app/PageShell.tsx)
+  不再被引用，已删除；`classic.*` 只保留仍被文件页使用的 `classic.open`。
+
+**验证**
+
+| 项目 | 结果 |
+|---|---|
+| 后端 | 新增 `test_api_users.py` 7 例（列表不带密文、创建后可登录、校验、重命名/重置、自己不可删/降级、非管理员 403、改密流程）+ `test_api_help_resources.py` 3 例；API 套件 **48 passed** |
+| 前端 | `npm test` 41 passed、typecheck / lint 通过；JS gzip **268.82 kB** |
+| 浏览器 | 1440×900 与 820×900 实测：三个 tab、创建用户→列表出现→删除→toast 全链路；帮助页渲染 about/usage；设置页账户卡；暗色正常 |
+| 数据 | 实测 LLM 7 条、向量 6 条、重排 1 条、MCP 0 条；索引 1 个（文件集合，7 个文件） |
+
+**仍未迁移（M4 才是收尾）**：Gradio 的模型供应商**编辑**表单、索引的新增/删除、以及 MCP 配置
+仍在 `/legacy`；这些操作要么依赖重启，要么是长表单，本轮只做只读视图 + 入口，避免做出一个
+半可用的编辑器。用户管理、账户改密、帮助文档已经可以在新界面完成。
+
 
 
 

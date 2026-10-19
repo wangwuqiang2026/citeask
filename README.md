@@ -22,7 +22,7 @@
 | 向量模型**用评测选型**，而不是凭感觉 | 4 个候选模型横向对比，Hit@1 从 **36.7% → 60.0%**（30 题版本实测） |
 | 向量化可切换：**通义 API（默认）** 或 **本地 ONNX**（离线兜底） | 通义与本地 mpnet 指标相当（Hit@1 均 60.0%，30 题版本），前者省掉 1 GB 本地模型 |
 
-自动化测试 **225 个用例**全绿，全部离线运行（不联网、不调用模型）；CI 每次 push 都会跑一遍。
+自动化测试 **322 个用例**全绿，全部离线运行（不联网、不调用模型）；CI 每次 push 都会跑一遍。
 
 ---
 
@@ -238,6 +238,38 @@ token 数来自 provider 返回的 usage（流式最后一帧也计），provide
 `KH_ROUTING_ENTITY_FILES=0` 可关。实测该题 6 → **4** 个文件、上下文里出现李明辉的综测行；
 27 题事实覆盖与误拒率保持 **96.3% / 3.7%**，P50 434 → **405 ms**（不调用嵌入）。
 
+**"答案要跨几个文件"的最后一层：这个人那一行，以及面板上的 0.0（§5.21，2026-10-18）**：问
+「某人能评上校级三等奖学金吗」时，上面那条补丁把名额花在了**已经在范围里**的通知上——问题里的
+3 字窗口 `奖学金`/`三等奖` 也会落进通知的表格行，真正指向某一行的 `王务强` 反而没名额了；
+就算表在范围里，进上下文的也是表里向量分最高的那几行，不是这个人那一行：**"这个人在哪一行"
+不是相似度问题**（行 0.351，条件段落 0.488）。现在多加一步**实体行补齐**：在用户的完整选择上做一次
+全文查询，只认"**行标识**落在**单元格**里"的词——`24405010135 王务强 75.45…` 算，
+`一等奖学金:综测…` 这种散文不算，`三等奖` 这种在同一块里重复十次的列值也不算（4 字名只以
+`欧阳佳` 窗口出现时，短单元格里包含窗口同样算）；每个文件最多 1 块、默认最多 3 块，放到上下文最前
+并**单独占名额**（`KH_ENTITY_ROWS` 默认 **3**，`0` 关闭；`KH_ENTITY_ROW_MAX_CHUNKS` 默认 **0** =
+不限）。实测该题上下文 10 块/3 文件 → **13 块/5 文件**，同一提示词下回答从「无法确定，没有综测
+数据」变成引用综测排名 6、学业排名 4、实践 32 学时并给出"具备申报资格"；跨文件 16 题事实覆盖
+**13/16 → 16/16**（本机私有语料，题集不随仓库提交，口径见 §5.21），27 题指标与无答案拒答不变。
+同一个改动修好了信息面板：它只读 LLM/Cohere 的分数键，而本地重排器写的是 `rerank_score`，
+所以过去**每一块都是 `[得分: 0.0]`、`相关性分数: 0.0`**；现在按 LLM 分 > 重排分 > 向量相似度取值。
+
+**问「代码里是什么算法」被拒（§5.22，2026-10-18）**：代码文件（`代码.txt`，`TxtReader`）入库正常、
+块也在上下文里，但**代码与中文问题在向量空间里离得远**（最佳 0.35–0.39，散文类 0.5–0.7），
+全局散文阈值把"问的就是这份文件"的问题也拒了——这是 §5.8「表格里的数字」的对偶。
+现在闸门多一条**结构性证据**：问题里出现**所命中文件的名字**（去扩展名、去空白标点后原样出现，
+如 `代码` 对应 `代码.txt`）时，门槛降到 `KH_ABSTAIN_TERM_FLOOR`（0.33）；长文件名不会被误命中，
+`0.30` 这种更弱的不放行。实测三种问法从拒答变成作答
+（同一提示词下答出"线性基函数模型 + 高斯(RBF)/Sigmoid/傅立叶基函数 + 正则化对比"）；
+27 题与无答案拒答不变（口径见 §5.22）。
+
+**"相关和不相关的得分差不多"（§5.23，2026-10-18）**：面板里 `代码.txt` 的块 0.35、不相关的
+《积分细则》块 0.31，看着一样。原因是**两种分数混在一列**：本地重排器比中文字词，代码是英文
+标识符，重排分全是 0，面板就回落到向量相似度——于是"重排器判 0 的块"显示 0.31，"重排器认的块"
+显示 0.29。修法三条：重排时把**文件名**计入评分（问题点到文件名，这个文件的每块都沾光）；
+面板**重排器跑过就用它的分（包括 0.0），没跑过才用向量分**；未引用的块**按这个分降序**排列
+（原来按默认恒为 0 的 LLM 分排，等于按 `set` 顺序）。实测同一题：相关块 0.29/0.12，
+不相关块 **0.00**；27 题 / 跨文件 16 题 / 无答案拒答均不变。
+
 **中文全文索引（§5.15，重要修正）**：关键词通道原来用 `en_stem` 分词——中文整句是一个 token，
 所以对任何中文问题都返回 0 条（日志里的 `Got 0 from docstore`），混合检索退化成"只有向量"，
 **名字/学号这类精确匹配一直靠不住**。现在改用 n-gram（2–3 字）分词，老库第一次查询时自动重建
@@ -381,6 +413,28 @@ Copy-Item .env.example .env
 
 打开 <http://127.0.0.1:7860>，默认账号 `admin` / `admin`。
 
+> **新 Web 界面在 `/`，经典 Gradio 界面保留在 `/legacy/`。**
+> 迁移期两套并存：回滚只需在 `.env` 里设 `KH_WEB_UI=0` 并重启，根路径就回到经典界面。
+
+### 前端开发（可选，运行应用不需要）
+
+前端源码在 `web/`，构建产物提交在 `libs/ktem/ktem/web/dist/`，**运行时不需要 Node**。
+只有改前端时才需要：
+
+```powershell
+cd web
+# 受限/沙箱环境里 npm 默认缓存不可写，先指到仓库内
+$env:npm_config_cache = "D:\Code\VibeCoding\kotaemon\ktem_app_data\tmp\npm-cache"
+npm ci
+npm run dev      # Vite dev server，代理 /api、/legacy、/file= 到 127.0.0.1:7860
+npm run build    # 产出到 ../libs/ktem/ktem/web/dist（提交这份产物）
+```
+
+- 改完前端必须 `npm run build`，Python 服务读的是 `dist`，不是 `src`。
+- API 前缀 `/api/v1`，会话 Cookie `ktem_session`（HttpOnly）；接口清单与设计说明见
+  [MODIFICATIONS.md §5.25](MODIFICATIONS.md#525-第二代前端react-spa--fastapi2026-10-18)。
+- 深色模式、会话、证据抽屉等前端状态说明见 `web/README.md`。
+
 主要配置项（详见 [MODIFICATIONS.md §3.7](MODIFICATIONS.md#37-配置与使用)）：
 
 | 配置项 | 默认 | 作用 |
@@ -417,10 +471,31 @@ Copy-Item .env.example .env
 关键词哨兵不误拒、阈值边界、审计日志写失败不影响作答）、本地重排与回退
 （`ktem_tests/test_local_reranker.py`）、`.pptx` 本地读取器（`kotaemon/tests/test_pptx_reader.py`）、
 查询 trace 与用量计数（`tools/tests/test_trace.py`）、评测打分与自检判定（`tools/tests/`）、
-按文件路由与实体证据（`ktem_tests/test_file_routing.py`）、示例语料与题集的一致性
+按文件路由与实体证据（`ktem_tests/test_file_routing.py`）、实体行补齐与面板相关性分数
+（`ktem_tests/test_entity_rows.py`、`ktem_tests/test_render_score.py`）、示例语料与题集的一致性
 （`tools/tests/test_fixture_eval.py`）。
 
-新增模块的本地覆盖率（`coverage run -m pytest … && coverage report`，实测 225 个用例）：
+新增的 Web API / 前端托管契约（38 例，`MODIFICATIONS.md` §5.25–§5.27）：
+
+```powershell
+# 本机访问不到 huggingface.co 时先打开离线开关：否则 App() 会为重试
+# Mixtral tokenizer 的 HEAD 请求多等约 90 秒（与功能无关，纯启动耗时）
+$env:HF_HUB_OFFLINE="1"; $env:TRANSFORMERS_OFFLINE="1"
+
+.\.venv\Scripts\python.exe -X utf8 -m pytest `
+    libs\ktem\ktem_tests\test_api_auth_meta.py `
+    libs\ktem\ktem_tests\test_api_conversations.py `
+    libs\ktem\ktem_tests\test_api_chat.py `
+    libs\ktem\ktem_tests\test_api_files.py `
+    libs\ktem\ktem_tests\test_evidence_channel.py `
+    libs\ktem\ktem_tests\test_web_host.py -q -p no:cacheprovider
+
+# `-p no:cacheprovider`：pytest 收尾写 .pytest_cache 要 mkdtemp，受限沙箱里会卡住；
+# 普通机器可以省略。前端（需要 Node 18+；沙箱里先设 npm_config_cache）
+cd web; npm test; npm run typecheck; npm run lint
+```
+
+新增模块的本地覆盖率（`coverage run -m pytest … && coverage report`，实测 322 个用例）：
 `abstain.py` 100% · `selector.py` 100% · `routing.py` 100% · `file_profile.py` 100% ·
 `llms/usage.py` 100% · `utils/trace.py` 98% · `rerankings/local_lexical.py` 98% ·
 `loaders/pptx_loader.py` 82% · `index/file/repair.py` 80%；`i18n.py` 与 `ocr_pdf_loader.py`

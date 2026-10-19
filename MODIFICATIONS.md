@@ -1109,6 +1109,21 @@ uv sync --python 3.10 --no-install-package llama-cpp-python
   且浏览器控制台无 `SyntaxError`。这是 §3.5 那次「整站白屏」的唯一可靠发现方式。
 - 词条缓存：`python -m ktem.utils.i18n stats --language zh` 应显示 `336 entries`；
   删除 `ktem_app_data/i18n/zh.json` 后首次启动仍是英文，需先跑 §3.7 的 build 命令重建。
+- **UI 视觉层（§5.24）**：
+
+  ```powershell
+  $env:TMP = "$PWD\ktem_app_data\tmp"; $env:TEMP = $env:TMP
+  $env:PYTHONPYCACHEPREFIX = "$env:TMP\pycache"
+  .\.venv\Scripts\python.exe -X utf8 -m pytest libs\ktem\ktem_tests\test_ui_theme.py -q
+  ```
+
+  → **14 passed**；启动日志应为 `UI language 'zh': ... 352 catalog entries, 19 missing`；
+  `/config` 里能查到 `app-header`/`app-tabs`/`chat-workspace`/`login-card`，
+  `theme` 为 `citeask`；首页源码含 `--ui-bg:` 与 `ktem-theme`。
+  > Windows 下 `-X utf8` 不可省（否则 Gradio 生成 `.pyi` 时按 GBK 解码源码直接报错）；
+  > 受限沙箱还要把 `TMP`/`TEMP` 指向 `ktem_app_data/tmp`，否则 pytest 的 `tmp_path`
+  > 会在既有的 `pytest-of-HP` 上触发 ACL 的 `PermissionError`。`test_i18n.py` 的
+  > 19 个 setup error 改动前就存在，不属于本改动。
 
 ---
 
@@ -1820,6 +1835,507 @@ Got 15 from vectorstore / Got 0 from docstore
 
 **局限**：实体证据是"字面出现在表格里"，不是语义判断；体积上限意味着**大表里的某一行仍然搜不到**
 （1 万块的招考简章这种）；"实体在、属性不在"（问体重、问不存在的名次）仍是 §5.19 局限 1。
+
+### 5.21 答案要跨几个文件时"不准"：路由把数据表筛掉了、行没进上下文、面板还全显示 0.0（2026-10-18）
+
+**现象**：问「王务强能评上校级三等奖学金吗」，回答「**无法确定**……提供的材料中没有王务强的
+综合测评排名、考试成绩总分排名及各科成绩信息」。信息面板里 10 个块只来自 **3 个文件**（校级奖学金
+通知 ×4、国家励志奖学金通知 ×3、Mathorcup 成绩 ×3），**综测汇总表和社会实践完成情况表一块都没有**，
+而这两份表的行里正好写着他的综测排名（6）、学业排名（4）、社会实践学时（32）。同时面板里**每个块都
+显示 `[得分: 0.0]`、`相关性分数: 0.0`**，看不出谁排第几。
+
+**定位一：路由 7 → 3，把两份表筛掉了**（打印档案相似度）：
+
+| 文件 | 档案相似度 | 是否被路由 |
+|---|---|---|
+| 计算机学院关于校级奖学金评定官网通知.docx | **0.583** | ✅ |
+| 计算机学院2025-2026学年国家励志奖学金通知.docx | 0.548 | ✅ |
+| Mathorcup校赛成绩发布.pdf | 0.466 | ✅（刚好压在门槛上） |
+| 计算机学院入党积极分子积分细则2025修订.pdf | 0.450 | ❌ |
+| 中央机关…公务员招考简章.xls | 0.433 | ❌ |
+| **24级计科1班社会实践完成情况表.xlsx** | **0.389** | ❌ |
+| **24级计科1班学年综测汇总表.xlsx** | **0.351** | ❌ |
+
+门槛 = 0.583 × 0.80 = **0.466**，两份表都远在门槛外——和 §5.20 是同一个根因，但这次 §5.20 的补丁
+**没救回来**：实体补回返回的是 `[校级奖学金通知, Mathorcup]`，两个名额全花在**已经在检索范围里**的
+文件上。原因是"实体词"取的是问题里的 3 字滑动窗口，`奖学金`(在 11/26 条全文命中里出现)、
+`三等奖`(7/26)、`等奖学`(2/26) 这些**主题词**也会落进通知的表格行（`一等奖学金:综合测评在班上前
+5名以内…`）和 Mathorcup 的 `三等奖` 单元格里，于是真正指向某一行的那唯一一个词（`王务强`，3/26）
+没有名额了。
+
+**定位二：就算表在范围里，行也不一定进上下文**。把路由关掉重跑，两份表确实各占 1 个名额，但
+`diversify_by_source` 给的是"这个文件里向量分最高的那一块"——综测表进上下文的是
+`郑乐钢/赵祥` 那几行（0.342），不是 `王务强 75.45 … 4` 那一行。**"这个人在哪一行"不是相似度
+问题**：问题问的是"能不能评上"，和"评上"最像的是通知里的条件段落（0.488），行本身只有 0.35。
+
+**定位三：面板全 0.0 是键名不匹配**。配置在用的是本地词法重排器，它把分数写进
+`metadata["rerank_score"]`；面板读的是 `llm_trulens_score`（LLM 打分，默认关闭）和
+`reranking_score`（Cohere/Voyage 的键）。三个键没对上，于是任何块都是 0.0——**检索命中与否在界面上
+长得一模一样**。
+
+**实现**
+
+1. `abstain.row_identifier_terms`：不再按"这个词出现在多少块里"判实体，而是看**它怎么出现**
+   （见下面"被实测否掉的第一版"）：
+   - 一次行的标识占**单元格**：`24405010135 王务强 75.45 …` 的一个字段，或竖排表格里独占一行
+     的 `王务强`；
+   - 主题词是散文（`奖学金` 在句子里）或**列值**（`三等奖` 在同一个 OCR 块里重复十次）。
+   于是 `王务强`(3 块) / `万妍妍`(5 块，含"汇总人"抬头) / `欧阳佳饴`(4 字名，只以 `欧阳佳` 窗口
+   出现) 都能认出来，而 `奖学金`/`三等奖` 不会。
+2. `abstain.cell_names_entity`：词必须落在**单元格**里，比 §5.20 的 `text_names_entity` 严——
+   那个是给路由用的"把文件放进范围"，这里判错就是**往上下文塞错块**。`一等奖学金:综合测评…`
+   这行散文不算；短单元格（≤6 字的纯中文）里包含 3 字窗口算（4 字名的唯一入口）。
+3. `DocumentRetrievalPipeline._entity_row_docs`：在用户**完整选择**上做一次全文查询（不是路由
+   之后的子集），把"行标识落在单元格"的块挑出来，**每个文件最多 1 块、默认最多 3 块**
+   （`KH_ENTITY_ROWS`）；`_promote_entity_rows` 把它们放到上下文最前，同块去重。
+4. **行占独立名额**：`diversify_by_source(docs, top_k + 行数)`。第一版直接占 top_k 里的名额，
+   结果「王务强在 Mathorcup 拿的二等奖能加多少入党积极分子积分」把《积分细则》的学科竞赛
+   条款挤出了上下文（该题事实覆盖 100% → MISS），所以改成加名额。
+5. 面板：`render.reranking_score_of`（`reranking_score` → `rerank_score`）与
+   `render.relevance_score_of`（LLM 分 > 重排分 > 向量相似度；全文命中 `-1` 哨兵显示 0.0），
+   标题里的 `[得分: …]` 也改用这个值。
+6. 配置：`KH_ENTITY_ROWS`（默认 3，0 关闭）、`KH_ENTITY_ROW_MAX_CHUNKS`（默认 0 = 不限制
+   行标识出现在多少个块里），见 `flowsettings.py`。
+
+**实测**（同一台机器、同一语料、同一提示词；`KH_ENTITY_ROWS=0` ↔ 默认值即"改前/改后"）
+
+| 口径 | 改前 | 改后 |
+|---|---|---|
+| 该题上下文 | 10 块 / 3 文件 / 4267 字符 | **13 块 / 5 文件 / 5531 字符** |
+| 该题上下文是否含王务强的综测行 | ❌ | ✅（综测排名 6、学业排名 4、实践 32 学时） |
+| 同一提示词 + DeepSeek 的回答 | 「**无法确定**……没有王务强的综合测评数据」 | 「综测排名约第 6、学业排名约第 4，满足前 10 / 前 15；实践完成。**具备申报资格**，名额第 6 名需参加年级评审」 |
+| 跨文件 16 题关键事实覆盖 | 13/16（81.3%） | **16/16** |
+| 27 题 Hit@1 / Hit@3 / Hit@5 / MRR | 96.3% / 100% / 100% / 0.975 | 96.3% / 100% / 100% / 0.975 |
+| 27 题关键事实覆盖 | 100% | 100% |
+| 27 题可答题误拒 | 0 题 | 0 题 |
+| 无答案 12 题正确拒答 | 11/12 | 11/12 |
+| 27 题检索 P50 / P95 | 589 / 2000 ms | **572 / 1654 ms**（多一次全文查询，无嵌入调用） |
+| 多文件 9 题 P50 / P95 | 664 / 2646 ms | **534 / 1849 ms** |
+
+**口径**：27 题与多文件题的 Hit@k / facts / 误拒 / 拒答，由本机只读 harness 按
+`tools/eval_retrieval.py` 的同一套定义计算（应用未启动时直接构造 `DocumentRetrievalPipeline`，
+读同一份 sqlite + 向量库；`KH_ENTITY_ROWS=0` 与默认值各跑一遍）。跨文件 16 题围绕本机私有语料
+写成、**不随仓库提交**（含真实姓名与学号）：5 道「某人够不够条件」、6 道逐人数据、2 道跨文件
+规则题、3 道单文件/对照题。回答对比用
+`kotaemon.indices.qa.citation_qa.DEFAULT_QA_TEXT_PROMPT` + 默认 DeepSeek 模型，同一提示词只换检索。
+
+**被自己实测否掉的第一版（留档）**：一开始按"这个词出现在 ≤max(3, 15%) 个全文命中块里"判实体。
+实测两个方向都错——`万妍妍` 既是队员又是班级汇总人，出现在 5 个块里被当成主题词（行没进来）；
+而 `三等奖` 出现在 7 个块里也算"主题词"纯属巧合。改用"单元格 + 不重复"结构判定后，
+`万妍妍` 的行能补进来，`奖学金`/`三等奖` 仍被挡住。第一版还让行占 top_k 内的名额，
+把另一道题的规则条款挤掉了（见实现 4）。
+
+**测试**：新增 `ktem_tests/test_entity_rows.py` **27 例**（单元格 vs 窗口 vs 散文 vs 列值、
+4 字名窗口、汇总人抬头不算、队名算、单字词不算、块数上限可选、重复次数可调、只认用户选择、
+每文件一块、条数与开关、vector 模式不用全文、文档库异常不中断、提升去重）与
+`ktem_tests/test_render_score.py` **6 例**（本地词法分、Cohere 分优先、LLM 分优先、
+无重排时回落到向量分、全文 `-1` 不显示负分、坏值不崩）；`abstain.py` 覆盖率 **100%**、
+`routing.py` **100%**。全套 `pytest`（见 README「测试」）**309 passed**。
+
+**局限**
+
+1. 仅 `hybrid` 模式生效：vector-only 是用户明确关掉关键词通道，不该偷偷用全文索引。
+2. 行标识要求"占一个单元格"，所以**跨单元格的名字**（如 `王` / `务强` 被拆成两格）和
+   **超过 6 个字的长格**（`某某某某某某研究所` 这种机构名）认不出来；同一块里重复出现 3 次以上的
+   名字也会被当成列值（`MAX_CELL_REPEATS=2` 可调）。
+3. 行补进来只解决"这个人的数据看不到"；**任何固定名额的检索都可能在预算之外漏块**——
+   16 题里现有的跨文件题都过了，但"需要的块恰好排在候选第 20 位"这种情形仍靠
+   `KH_RETRIEVAL_CANDIDATES` / `num_retrieval` 兜，重排质量仍是上限。
+4. 面板的「相关性分数」是"三种信号里最强的一个"，不是校准过的置信度；LLM 打分默认关闭。
+
+### 5.22 问「代码里是什么算法」也被拒：闸门只认散文相似度（2026-10-18）
+
+**现象**：上传 `代码.txt` 后问「代码文件夹描述了什么算法」，回答
+「知识库中没有回答这个问题所需的依据（**最佳匹配得分 0.35，低于阈值 0.45**）」。
+信息面板里明明有 `代码.txt` 的块，**`# 【高斯基函数（RBF）】` 那段就在里面**。
+
+**定位**：`代码.txt` 已经正常入库（`TxtReader`，8 块，向量与全文索引都在）。把三种问法都跑一遍：
+
+| 问法 | 最佳相似度 | 闸门 | 上下文里有代码块吗 |
+|---|---|---|---|
+| 代码文件夹描述了什么算法 | 0.348 | ❌ 拒答 | ✅（10 块里 5 块来自 代码.txt） |
+| 代码.txt 里描述了什么算法 | 0.386 | ❌ 拒答 | ✅ |
+| 这个代码用了什么算法 | 0.392 | ❌ 拒答 | ✅ |
+
+同一份库里，问中文散文类问题时最佳相似度是 0.5–0.7；代码（英文标识符、缩进、`->`/`@`/`#`）
+和中文问题在向量空间里离得远。**这是 §5.8"表格里的数字"的对偶**：内容在库里，但相似度天生低，
+全局散文阈值把"问的就是这份文件"的问题也拒掉了。实体词放宽不适用——代码里没有"表格行/单元格"。
+
+**实现**（`abstain.named_file_evidence` + `should_refuse`）：
+
+1. 问题里出现**所命中文件的名字**（去掉扩展名、去空白与标点后比较）时，把它当作**结构性证据**，
+   门槛降到 `KH_ABSTAIN_TERM_FLOOR`（0.33）——与"实体词落在表格行"同一个下限，不是另开一套。
+2. 规则刻意严格：文件名主干必须**原样**出现在问题里，所以 `代码` 只对应 `代码.txt`；
+   `计算机学院关于校级奖学金评定官网通知.docx` 这种长名字永远不会被问题意外命中。
+   主干少于 2 个字符（`a.txt`）不参与。
+3. 只有**本次检索到的**文件才能作证（没被召回的文件谈不上"帮你回答"）；且最佳相似度仍须
+   ≥ 0.33，0.30 这种更弱的不放行。
+4. 评测工具同步，保持"衡量的是 App 的同一个决定"：`tools/eval_retrieval.py` 的结果里多一个
+   `file_evidence` 字段，阈值扫描（`abstain_summary`）也认它。
+
+**实测**
+
+| 口径 | 改前 | 改后 |
+|---|---|---|
+| 「代码文件夹描述了什么算法」 | 拒答（0.348 < 0.45） | **作答**，引用 `线性基函数模型` / `高斯基函数（RBF）` / `Sigmoid` / `傅立叶` + 正则化对比 |
+| 「代码.txt 里描述了什么算法」 | 拒答（0.386） | **作答** |
+| 「这个代码用了什么算法」 | 拒答（0.392） | **作答** |
+| 27 题（当前语料，含代码文件） | — | 关键事实 **26–27/27**、可答题误拒 **0–1**（详见下） |
+| 无答案 12 题正确拒答 | 11/12 | 11/12（n12「教务处的电话」0.532 一直如此，属 §5.19 局限） |
+
+回答对比用同一提示词 + 默认 DeepSeek 模型，只换闸门：改后答案是
+"**线性基函数模型（Linear Basis Function Model）**，基函数含多项式/高斯(RBF)/Sigmoid/傅立叶，
+并用不同 `Lambda` 对比正则化效果"——全部来自 `代码.txt`。
+
+**测量口径的副作用（顺手修的两处）**：同一道题在不同进程里测出 0.448 / 0.535 两个结果
+（27 题事实覆盖因此在 26/27 与 27/27 之间跳动）。已把两处**顺序不定**固定住：
+`chunk_ids` 查询加 `ORDER BY id`、`rank_files` 同分按 file id 排序、评测工具的选文件列表按名字排序。
+剩余抖动来自近似向量索引本身，不在本次改动范围；因此本节的 27 题数字写成**区间**而不是单值。
+
+**局限**
+
+1. 文件名不含问题里的词时（`main.py` + 问「这段代码」）不覆盖；这时只能靠向量相似度或
+   `KH_ABSTAIN_SCORE_THRESHOLD` 下调。
+2. 文件名主干是通用词（`通知.docx`、`报告.docx`）时，问「通知里写了什么」会被降到 0.33 作答，
+   由 0.33 下限兜底；想更严格可把 `KH_ABSTAIN_TERM_FLOOR` 调回 0.45。
+3. 这是启发式（字面命中文件名），不是语义判断；"用户问的确实是这份文件"由文件名替我们确认。
+
+**测试**：`test_abstain_gate.py` +6 例（命名文件作答、长名字不误命中、未召回的不能作证、
+过短主干忽略、0.30 仍拒、`abstain_events` 集成）；`tools/tests/test_eval_retrieval.py` +3 例
+（命名文件不算拒答、不命名仍拒、阈值扫描认它）；`test_file_routing.py` +1 例（同分按 file id
+稳定排序）。全套 `pytest`（见 README「测试」）**319 passed**。
+
+### 5.23 相关文件和不相关文件的"得分"差不多：面板把两种尺子混在一列里（2026-10-18）
+
+**现象**：问「代码.txt讲了什么算法」，信息面板里 `代码.txt` 的块是 **0.35 / 0.36**，
+《积分细则》的块是 **0.29 / 0.31 / 0.36** —— 相关与不相关落在同一区间，甚至有一块不相关的
+0.36 更高；顺序也是交错的（0.29 → 0.35 → 0.31 → 0.31 → 0.35 …），不是按分数排的。
+
+**定位一：显示的是两种分数**。配置在用的是本地词法重排器，它比的是**中文字符 bigram**；
+代码内容是英文标识符，所以这一题的重排分**全是 0**。面板的 `relevance_score_of` 在重排分 ≤ 0 时
+**回落到向量相似度**，于是：
+
+- 重排器**判 0** 的《积分细则》块 → 显示向量分 **0.31**；
+- 重排器**认的** `代码.txt` 块 → 显示重排分 **0.29**。
+
+两种尺子摆在一列里，数值不可比——这正是"相关和不相关得分差不多"的直接原因。
+
+**定位二：面板顺序来自 `set` 迭代**。`citation_qa.prepare_citations` 里未被引用的块按
+`llm_trulens_score` 排序，而这个分**默认关闭、恒为 0**，排序成了空操作，顺序退化成
+`set` 的迭代顺序 → 相关/不相关交错、分数上下跳。
+
+**实现**
+
+1. `local_lexical.scoring_text`：重排时把**文件名**计入评分文本。问「代码.txt讲了什么算法」时，
+   `代码.txt` 的每一块都命中 `代码`/`txt`，其他文件不命中——这就是 §5.22 用来判"用户点到了这份
+   文件"的同一个结构信号，只是这里用在**排序**上。
+2. `render.relevance_score_of`：**重排器跑过就用它的分（包括 0.0），没跑过才用向量相似度**
+   （`has_rerank_score`）。0.0 的含义是"重排器认为没有词面重叠"，不是"没有分数"；向量分仍在
+   明细里显示（`Vectorstore score:`）。
+3. `citation_qa.prepare_citations`：未引用的块**按面板显示的那个分排序**（降序，doc id 打破平局），
+   不再是 `set` 顺序。
+
+**实测**（同一份库；`代码.txt` 见下面"注意"）
+
+| 口径 | 改前 | 改后 |
+|---|---|---|
+| 面板里的相关/不相关块（同一题） | 相关 0.35–0.36 vs 不相关 0.29–0.36（重叠） | 相关 0.29 / 0.12 vs 不相关 **0.00**（分开） |
+| 面板顺序 | 交错、按 set 顺序 | 按分数降序、两次运行一致 |
+| 27 题关键事实 | 26–27/27 | 26–27/27（±1 题的波动是近似向量索引的，见 §5.22 口径） |
+| 27 题可答题误拒 | 0 | 0 |
+| 跨文件 16 题关键事实 | 16/16 | 16/16 |
+| 无答案 12 题正确拒答 | 11/12 | 11/12 |
+
+**注意（这次没能端到端复测代码题）**：写这节时 `代码.txt` 已不在索引里（库里只剩 7 个文件），
+所以代码文件上的效果是用**单测**钉住的（`test_the_file_name_counts_as_overlap` 等），重新上传后
+可以直接在界面上验证。
+
+**局限**
+
+1. 词法重排仍只看字面：语义相同但用词不同的块会得 0 分（面板显示 0.0，明细里还能看到向量分）。
+   真正的语义重排需要 cross-encoder / LLM 重排（成本见 §5.10）。
+2. 文件名计入评分意味着"文件名与问题用词相同"会被加权；文件名很泛（`数据.xlsx`）时这个信号会
+   变弱甚至变噪。
+3. 27 题在不同进程间仍有 ±1 题波动（近似向量索引），与本次改动无关。
+
+**测试**：`test_render_score.py` +1 例（重排 0.0 不再回落到向量分）、`test_local_reranker.py`
++2 例（文件名计入评分、单独文件名救不了无关文件）。全套 `pytest`（见 README「测试」）**322 passed**。
+
+### 5.24 界面视觉重构：从「Gradio 默认皮」到一套可校验的设计令牌（2026-10-18）
+
+**背景**：反馈是「前端界面太粗糙」。逐项定位后，粗糙感来自四层叠加，而不是单一配色问题：
+
+| 问题 | 证据（改前） | 影响 |
+|---|---|---|
+| 三栏比例 1:6:4，信息面板比侧栏还宽 | `pages/chat/__init__.py` 的 `scale=1/6/4`、`INFO_PANEL_SCALES={True:8,False:4}` | 聊天主区被挤窄，界面重心错位 |
+| 面板无分隔（`panel_border_width=0`、`block_shadow=none`） | `assets/theme.py` | 三块区域"糊"在一起，没有层次 |
+| 浅色输入框 `neutral_200` 压在 `neutral_50` 背景上 | `assets/theme.py` 的 `input_background_fill` | 灰上灰，输入区显脏 |
+| 主按钮是 emerald→blue 渐变 | `assets/theme.py` 的 `gradient*` | 2023 年观感，且渐变无法做对比度校验 |
+| 圆体 Quicksand 作正文，中文全部回退 | `assets/theme.py`、`main.css` 的 markmap 字体 | 中文界面字形不统一，且依赖外网字体 |
+| 版本号、深色切换、展开按钮三处 fixed/absolute | `assets/js/main.js`、`main.css`（`right:-10px`） | 右上角互相叠压，像临时拼的 |
+| 硬编码颜色：`mark #10b981`、图标 `#cecece`、开关 `#12df9a`、弹窗 `#fefefe` | `assets/css/main.css` | 暗色下刺眼/白底闪，无法统一调整 |
+| 图标集实心/描边混用、三种颜色、非法单位 | `assets/icons/*.svg` | 侧栏按钮不成套 |
+| 图标目录按 CWD 猜路径 | `pages/chat/control.py` 的 `ASSETS_DIR` | 非仓库根目录启动时图标失效 |
+| 登录页标题英文（改名后词表失配） | `pages/login.py` 拼 `# Welcome to citeask!`，词表只有 `Kotaemon` 版 | 中文界面首屏就是英文标题 |
+| 信息面板空状态是裸 `<h5>` | `control.py`、`reasoning/simple.py` | 未提问时一块空白 |
+| 无 `:focus-visible`、无 `prefers-reduced-motion`、无媒体查询 | `assets/css/main.css` 全文 | 键盘不可见、动效不尊重系统设置、窄屏无适配 |
+
+**设计方向**：用 `ui-ux-pro-max` 的 `--design-system` 查询
+`knowledge base document QA research assistant productivity tool`（density 7 / motion 3 /
+variance 3），结论是 **Minimalism & Swiss**、中性灰 + 链接蓝。落地取舍：
+
+- 配色直接对齐 Tailwind slate/blue（Gradio 内置 `colors.slate` / `colors.blue`），
+  强调色 `#2563EB`，危险 `#DC2626`，画布 `#F8FAFC` / 暗色 `#0A0F1E`。
+- 字体改为系统无衬线栈 + CJK 家族（`PingFang SC` / `Microsoft YaHei` / `Noto Sans CJK SC`
+  / `Source Han Sans SC`），**移除 GoogleFont**：中文界面不再依赖外网字体，也不会中英混排跳字形。
+- 8px 网格；动效 120ms/180ms，`prefers-reduced-motion` 下归零。
+
+**实现**（按层）
+
+1. **令牌层**：新建 `assets/css/tokens.css`（66 个 `--ui-*`，浅色 `:root` / 深色 `html.dark`，
+   后者比 Gradio 的 `.dark` 高一级特异性）；`assets/theme.py` 重写（Soft 基类保留、
+   blue/slate、主按钮实色、系统+CJK 字体栈）；`assets/__init__.py` 新增 `load_css()`
+   （tokens→main 顺序拼接）与 `read_js()`；`assets/css/main.css` 重写 1646 行、11 段
+   （base→shell→workspace→sidebar→chat→evidence→tables/forms→chips/toast/modal→
+   responsive→a11y→Python 工具类），**0 个十六进制色值**。
+2. **应用外壳**：`main.py` 新增 `app-shell`/`app-header`/`app-brand`/`app-version`/
+   `app-header-actions`/`app-tabs`；深色切换按钮从 `pages/chat/control.py` 迁到顶栏
+   （全站唯一 `#toggle-dark-button`）；版本号改为服务端渲染 chip，删除 `main.js` 里
+   固定定位的版本节点。
+3. **工作区**：三栏改 **2:7:3**，`INFO_PANEL_SCALES={True:5,False:3}`；`#chat-workspace`
+   用边框分区、`gap:0`；窄屏 <1024 信息面板落到聊天下方、<820 侧栏堆到最上、<640 单列。
+4. **证据面板**：summary 内改为 `.meta` + `.chip > .chip-label/.chip-value`；
+   空状态改为 `.empty-state > .empty-state-title/.empty-state-hint`（替换三处裸 `<h5>`）。
+   **`<details class='evidence'>` 与 `.evidence-content` 结构逐字保留**——`main.js`
+   的全文检索依赖 `#html-info-panel > div:last-child > div > details.evidence
+   div.evidence-content` 这条选择器。
+5. **文件页/设置/帮助/登录**：文件页加 `#index-upload`/`#file-toolbar`/`#file-selection`/
+   `#chunk-panel`/`#upload-progress`；设置页每个 Tab 内容包 `.panel-card`、保存条 sticky；
+   登录页改居中卡片，标题走 `tr("# Welcome to {}!").format(app_name)`（修掉改名后的
+   英文标题），表单首屏即 `visible=True`（消除异步翻转造成的空白）。
+6. **图标**：6 个 SVG 统一为 24×24、`fill="none"`、`stroke="#64748B"`、`stroke-width="1.75"`，
+   新增 `theme.svg`；`ASSETS_DIR` 改为基于 `Path(__file__)` 的绝对路径。
+7. **交互与可访问性**：新建 `assets/js/theme_init.js`（`<head>` 内、首绘前按
+   `localStorage["ktem-theme"]` 或系统偏好给 `<html>` 定主题并写暗色背景防白闪）；
+   `main.js` 保持单一 `function run()`（Gradio 会包成函数表达式），全程空值保护 +
+   try/catch，`aria-label`/`title`/`aria-pressed` 走 `__KTEM_t` 并有 MutationObserver 补挂；
+   `toggleChatColumn` 改用 `.is-collapsed` 类 + 内联 flexGrow 兜底，全局函数名不变。
+8. **词表**：`assets/i18n/zh.json` +12 条（340→352），只增不删。
+
+**实测**
+
+| 项目 | 结果 |
+|---|---|
+| 对比度（解析 `_get_theme_css()`，正文/次要/链接/主按钮） | 浅色 14.63 / 7.58 / 5.17 / 4.94；深色 16.30 / 12.02 / 9.90 / 7.51 |
+| 主题 CSS | 无 `gradient`、无 `googleapis`，字体栈含 4 个 CJK 家族 |
+| `load_css()` | tokens 在 main 之前；main.css 十六进制 0 命中；60 个引用令牌全部有定义 |
+| 新增单测 | `libs/ktem/ktem_tests/test_ui_theme.py` **14 passed** |
+| 基线回归（4 文件） | **41 passed / 19 errors**，与改动前完全一致（19 个是沙箱 `tmp_path` ACL 的既有 setup error） |
+| 启动日志 | `UI language 'zh': 296 labels localized, 352 catalog entries, 19 missing`（改前 295/340/20） |
+| `/config` | `theme=citeask`；469 components / 252 dependencies；契约内 54 个 `elem_id` 全部命中（`app-version` 在品牌 HTML 内） |
+| 首页 | `200`、610002 字节，含 `--ui-bg:`/`--ui-accent`/`ktem-theme`/`details.evidence` |
+
+**已知限制**
+
+1. 本沙箱无法截图（headless Chrome 启动无输出、repo 既知 playwright 不可用），
+   最终观感与 1440/1024/820 三档响应式需人工目视；自动化只覆盖静态断言与 `/config`。
+2. CDN 依赖未动（`pdfjs-viewer-element` / `tribute` / `markmap` / `minisearch`）。
+3. `theme_init.js` 在 0/150/600/1500ms 重断言主题；若 Gradio 在此之后再次按系统偏好改写
+   `<body>` 的 `dark`，极端情况下仍可能闪回一帧。
+4. Gradio 4.39 的 `color_accent` 没有 `_dark` 变体，暗色强调色由 tokens 层
+   （`--ui-accent` 等）承担，Gradio 自有组件里少数仍用 `primary-600`。
+5. `toggleChatColumn` 依赖 `.is-collapsed` 与 Gradio 内联 `flex-grow` 的兼容，属于对
+   上游实现的让步；若未来升级 Gradio 需重测。
+
+### 5.25 第二代前端：React SPA + FastAPI（2026-10-18）
+
+**背景与决策反转**：§5.24 在 Gradio 内部把视觉做到了上限，但反馈仍然是"界面太粗糙"。
+根因不是配色，而是**渲染层被 Gradio 的组件模型锁死**：每个控件都是独立带边框的盒子，
+布局只能靠 `elem_id` 补丁，无法做出"可拖拽三栏 / 抽屉 / 命令面板"这类结构。
+因此推翻 [ROADMAP §7](ROADMAP.md#7-d-组明确不做) 里"重写前端：明确不做"的判断，
+改为**渲染层整体替换**：Python 侧新增一层 HTTP/SSE API，Gradio 退居 `/legacy`。
+
+**托管与回滚**（[app.py](app.py)）
+
+```
+/                React SPA（web/dist，committed）
+/api/v1/*        JSON + SSE（ktem/api → ktem/services）
+/legacy/         经典 Gradio 界面（gr.mount_gradio_app）
+```
+
+- `KH_WEB_UI=0` 时根路径回到 Gradio（已实测：`/` 610KB Gradio HTML，`health.ui=classic`）。
+- `app.py` 用 `uvicorn` 启动；端口仍读 `GRADIO_SERVER_PORT`（默认 7860），
+  `start.bat` / `scripts/bootstrap_windows.ps1` 不需要改。
+- `web/dist` 的位置由 `ktem.web.resolve_web_dist` 决定：`KH_WEB_DIST` → 仓库
+  `web/dist` → 包内 `ktem/web/dist`。
+
+**后端**（`ktem/services/*` + `ktem/api/*`，均不 import gradio）
+
+| 模块 | 作用 |
+|---|---|
+| `services/auth.py` | sha256 校验 + HMAC 签名的 `ktem_session` Cookie（HttpOnly/SameSite=Lax，7 天）；密钥取 `KH_SESSION_SECRET`，缺省生成 `ktem_app_data/session.key` |
+| `services/conversations.py` | 会话 CRUD、`data_source` 读写、公开会话可见性、反馈；继续写旧格式 `[[user, bot], ...]`，额外写 `evidence_history` / `selected_web` |
+| `services/chat.py` | 从设置/覆盖项/检索范围构建管线，`pipeline.stream` → 事件；落库、自动命名、追问建议 |
+| `services/settings.py` | 扁平设置读写 + 表单 schema（`SettingItem` 驱动，label 走 `tr()`） |
+| `services/files.py` | 文件列表/上传 SSE/块预览/删除/下载/分组（M2） |
+| `api/*` | `auth/meta/conversations/chat/settings/files` 路由，统一前缀 `/api/v1` |
+
+SSE 事件：`start`（可带 `warning`）→ `token`/`reset` → `evidence`（结构化数组）→
+`mindmap` / `plot` → `done{message_id,name}` → `title` → `suggestions`；管线异常发 `error`
+且不落库。同步管线跑在线程里，经 `asyncio.Queue` 桥接，15s 心跳；客户端断开后停止消费。
+
+**结构化证据**（[schema.py](libs/kotaemon/kotaemon/base/schema.py)、[simple.py](libs/ktem/ktem/reasoning/simple.py)）
+
+- `Document.channel` 增加 `evidence` / `mindmap`（向后兼容；经典页面忽略未知 channel）。
+- `FullQAPipeline.structured_evidence()` 用 `match_evidence_with_context` 的 spans 生成
+  `{id,file_id,file_name,page,type,score,vector_score,rerank_score,llm_score,text,file_path,cited,spans}`，
+  按"被引用优先、再按面板分数"排序；**拒答分支也会发证据**（本轮实测 10 条），
+  经典 HTML 面板继续保留（同一份 `docs`、同一套打分函数）。
+
+**前端**（[web/](web)）
+
+- 栈：React 18 + TypeScript 5.6 + Vite 5 + Tailwind 3.4 + Radix/shadcn 手写基元 +
+  react-query + zustand + react-markdown/highlight + cmdk + resizable-panels。
+- 已实现：`/login`、`/chat`、`/chat/:id`；Rail + 可拖会话侧栏（搜索/分组/hover 操作）、
+  空状态建议问题、流式回答（骨架/光标/markdown/代码高亮/停止/重试/复制/反馈）、
+  证据抽屉（搜索/相关性条/被引用标记/打开原文/`【n】` 联动）、聊天设置弹层、
+  `⌘/Ctrl+K` 命令面板、明暗主题（首绘前防白闪）、中英文案、1024/1280/820 响应式。
+- M2：`/files`（搜索 + 原生上传/URL（SSE 进度）+ 文件表与行操作（查看分块/下载/重建索引/删除）
+  + 分组 CRUD + 分块抽屉）与 `/settings`（schema 驱动表单、左分组导航、吸底保存/放弃、
+  未保存提示、数字内联校验）已替换占位页。
+- `/resources` `/help` 仍为"经典界面"卡片 + `/legacy` 链接（M3）。
+
+**实测**
+
+| 项目 | 结果 |
+|---|---|
+| 后端新增测试 | `test_api_auth_meta` 6 + `test_api_conversations` 4 + `test_api_chat` 3 + `test_evidence_channel` 3 + `test_api_files` 17 + `test_web_host` 4 = **37 passed** |
+| 前端 | `npm test` **41 passed**；`npm run lint` 0 警告；`npm run typecheck` 通过 |
+| 构建 | JS 887.80 kB → **gzip 264.60 kB**（预算 350）；CSS 44.02 kB / 9.65 gzip；`node --check` 通过 |
+| 真实链路 | DeepSeek 回答 **328 个 `token` 事件**、`evidence` 9 条、自动标题、`done` 落库；拒答分支 `start/evidence/token/done` 齐全 |
+| 托管 | `/` 200 且引用哈希资源；`/assets/*.js|css` 200；`/api/v1/health` 200；`/legacy/` 200（Gradio 626KB） |
+| 回滚 | `KH_WEB_UI=0`：`/` 回到 Gradio，`ui=classic` |
+| 经典界面回归 | 既有测试基线不变：4 个 i18n/render/file-list 文件 **41 passed / 19 errors**（19 个是沙箱 `tmp_path` ACL 的既有环境错误） |
+
+**已知限制 / 后续**
+
+1. 观感与响应式已用 agent-browser 在 1440×900 逐页截图复核（登录/聊天/证据/文件/设置，明暗两套），
+   但最终是否合意仍需人工目视；自动化覆盖的是构建、API、SSE 与托管契约。该浏览器需要写
+   `%USERPROFILE%\.agent-browser`，本沙箱下必须提权运行，普通终端无此限制。
+2. M3 的 Resources / Help / 用户管理页面尚未迁移（API 已就绪或待建）；Gradio 仍在 `/legacy`。
+3. 本沙箱禁止向新建子目录写文件，**原生上传无法在本会话完成端到端验证**（`mkdtemp` 后写入即
+   `Permission denied`，接口返回 403）；上传/重建索引逻辑由 `test_api_files.py` 的 17 例覆盖，
+   真实上传需在普通环境点一次。列表（7 行）、分块（4 块）、设置 schema（6 组）/values（40 键）
+   均已通过 7860 实测。
+4. 本沙箱的 shell/Node 不能写 `libs/**`，所以构建输出落在仓库 `web/dist`；
+   `libs/ktem/ktem/web/dist/` 内只是占位，发布时用
+   `scripts/build_web.ps1`（普通机器）把产物复制进包内。
+5. 构建链在本沙箱绕开 esbuild（`web/scripts/sandbox-shim.mjs` + Vite API + Babel + terser），
+   普通终端效果相同；`npm run dev` 的依赖预打包依赖 esbuild，需在普通终端运行。
+6. `messages[]` 暂无逐条时间戳，日期分隔回退到会话创建时间；如需多日期分隔，
+  下一步给消息加 `created_at`。
+7. PDF 预览当前复用 `/legacy/file=<path>#page=N`（浏览器内置阅读器），原生 PDF.js
+  阅读器（页码跳转 + 文本高亮）尚未迁移；设置页也不处理用户密码（仍在 `/legacy`）。
+8. 打包复制路径：`scripts/build_web.ps1 -CopyToPackage`（根目录脚本是 `web/scripts` 的薄封装）。
+9. 首屏 JS 已到 264 kB gzip（预算 350 kB，但增长很快）；继续加页面时应先做路由级 `lazy()` 拆分。
+
+### 5.26 登录前 `/meta` 无限 401、卡在"加载中"（2026-10-18，回到 §5.25）
+
+**现象**（用户实测日志）：打开 `http://127.0.0.1:7860/` 后 `/api/v1/meta` 连续 401，
+120 秒内 **246 次**，页面永远停在"加载中…"，登录表单根本点不到，日志里也从来没有
+`POST /api/v1/auth/login`。
+
+**根因**（用 CDP 抓到的调用栈 + 请求时序确认）：`/api/v1/meta` 需要会话（`test_api_auth_meta`
+明确规定匿名 401），但 `App` 在 `user === null && metaQuery.isLoading` 时渲染启动屏，而
+`LoginPage` 自己也 `useMeta()`。于是形成循环：
+
+1. meta 401 → 查询失败 → `App` 认为"没在加载" → 渲染 `/login` → `LoginPage` 挂载；
+2. `LoginPage` 的 `useMeta` 观察者挂载即触发 `refetchOnMount` → meta 重新 pending；
+3. `App` 又看到 `metaQuery.isLoading` → 退回启动屏 → `LoginPage` 卸载 → 请求失败；
+4. 回到第 1 步。请求栈为 `QueryObserver.onSubscribe → Query#fetch`，正好对应"挂载即取"。
+
+雪上加霜的两点：全局默认 `retry: 1` 对 4xx 也重试；401 事件把 `me` 置空又触发一轮渲染。
+
+**修复**
+
+| 文件 | 改动 |
+|---|---|
+| [web/src/lib/retry.ts](web/src/lib/retry.ts) | 新增 `shouldRetry()`：**4xx 一律不重试**，5xx/网络错误最多再来一次 |
+| [web/src/lib/query.ts](web/src/lib/query.ts) | 默认 `retry` 改为 `shouldRetry` |
+| [web/src/hooks/use-api.ts](web/src/hooks/use-api.ts) | `useMeta(enabled)`：未登录不请求 `/meta` |
+| [web/src/App.tsx](web/src/App.tsx) | 启动只等 `/auth/me`；已登录才等 meta；meta 失败显示"重试"错误页而不是无限转圈；401 时清掉 meta 缓存 |
+| [web/src/pages/LoginPage.tsx](web/src/pages/LoginPage.tsx) | 登录页不再请求 meta（未启用用户管理时 `/auth/me` 会直接返回匿名用户并跳转） |
+| [web/src/lib/api.ts](web/src/lib/api.ts) | `/api/v1/auth/*` 的 401 是"密码错"，不再广播会话失效 |
+
+**同时修掉的观感缺陷**（截图逐页复核）：登录卡片垂直居中；证据面板默认收起、有证据才自动展开；
+输入框从 40px 起步（原先被固定在 200px 上限）；页头"新对话"只在侧栏收起或窄屏出现；
+设置页的索引分组标题走 `tr()`（`File Collection` → `文件集合`）；文件页副标题不再重复索引名；
+空状态在可视区垂直居中。
+
+**验证**
+
+| 项目 | 结果 |
+|---|---|
+| 匿名打开 `/` | 只有 1 个 `GET /api/v1/auth/me` 200，**0 个 meta 请求**，登录表单立即可用 |
+| 登录 | `POST /auth/login` 200 → `meta` **只请求一次** 200 → `/conversations` 200 |
+| 真实问答 | 问题"国家励志奖学金的申请条件是什么？" → 结构化回答、证据面板自动打开 **9 条证据**、自动标题 |
+| 前端 | `npm test` **41 passed**（新增 `retry.test.ts` 3 例）、typecheck / lint 通过 |
+| 构建 | JS 887.80 kB → gzip **264.60 kB**（+0.41 kB） |
+| 浏览器 | agent-browser 1440×900 截了登录/空态/问答/证据/文件/设置/暗色共 11 张逐页检查 |
+
+日志开头那两行 `ALTS creds ignored ... untrusted ALTS is not enabled` 是 gRPC/absl 在
+非 GCP 环境初始化时的固定噪音（`E0000` 只是被当成 error 打出来），与前端无关，可忽略。
+
+### 5.27 对话视图补齐：思维导图持久化、证据对齐、窄屏浮层（2026-10-19，承接 §5.25/§5.26）
+
+**问题 1：刷新后证据全没了（真 bug）**
+
+服务端把 `evidence_history` 存成**每个问答对一条**，而消息列表按**消息**索引（答案在奇数位）。
+实时流里前端把证据写在 `assistantIndex`（如 1），与载入时的 `evidence_history[1]`（只有 0 号元素）
+对不上，于是重开历史会话时证据面板为 0 条、每条消息下的"N 条证据"也不显示。
+
+修复（[use-chat-stream.ts](web/src/hooks/use-chat-stream.ts)）：新增 `toMessageIndexed()`
+（载入时把按对的数组按 `2i+1` 铺到消息索引）与 `toPairIndexed()`（写回 react-query 缓存时压回
+服务端形状），实测刷新后仍显示 **9 条证据**。
+
+**问题 2：思维导图在网页端被丢弃**
+
+`onMindmap: () => undefined` —— 后端 `mindmap` 通道发出来了、也落库了，前端却什么都不做。
+现在：
+
+- 后端：[conversations.py](libs/ktem/ktem/services/conversations.py) 的 `persist_turn(..., mindmap=...)`
+  把 markdown 写进 `mindmap_history`（按对对齐，`regenerate` 覆盖最后一条而不是追加），
+  `GET /conversations/{id}` 一并返回；[chat.py](libs/ktem/ktem/services/chat.py) 在收到
+  `channel == "mindmap"` 时记住文本并透传。
+- 前端：答案下方出现可折叠的「思维导图」卡片（原生 `<details>`，默认收起），内容按 markdown
+  渲染，与答案、证据一起随会话持久化。
+
+**问题 3：窄屏首屏被抽屉/浮层盖住**
+
+宽度 < 1024px 时会话列表和证据面板都是浮层，而它们的显示状态来自持久化偏好（常常是 true），
+一进页面就整块盖住聊天内容。现在窄屏挂载时自动收起二者，且证据**只在宽屏**随首个证据自动展开
+（窄屏留给顶栏按钮，避免遮住答案）。
+
+**验证**
+
+| 项目 | 结果 |
+|---|---|
+| 后端 | 新增 `test_mindmap_is_stored_next_to_its_answer`（写入 + 重生成覆盖），API 套件 **38 passed** |
+| 前端 | `npm test` **41 passed**、typecheck / lint 通过；JS gzip **265.11 kB** |
+| 真实链路 | `USE_LOW_LLM_REQUESTS=false` 启动 → 提问后生成思维导图 markdown（`mindmap_history` 实测有内容）、刷新后卡片与 9 条证据都还在 |
+| 窄屏 | 820×900 实测：无会话抽屉、无证据浮层，顶栏出现「新对话」 |
+| 宽屏 | 1440×900 实测：思维导图折叠卡 + 停靠证据栏 + 每条消息的证据计数 |
+
+**环境提示（不是代码问题）**：本机访问不到 `huggingface.co` 时，`App()` 会为
+`mistralai/Mixtral-8x7B-v0.1` 的 tokenizer 重试 HEAD 约 90 秒才继续启动；设
+`HF_HUB_OFFLINE=1`（配 `TRANSFORMERS_OFFLINE=1`）即可跳过。测试时另加
+`-p no:cacheprovider`，否则 pytest 收尾写 `.pytest_cache` 的 `mkdtemp` 在受限沙箱里会卡住。
+`.env` 里 `USE_LOW_LLM_REQUESTS=true` 时 `meta.features.mindmap` 为 false，聊天设置里不显示
+思维导图开关（既有语义：低 LLM 调用模式不生成 mindmap），需要时把它设为 false 再重启。
+
+
+
+
 
 
 

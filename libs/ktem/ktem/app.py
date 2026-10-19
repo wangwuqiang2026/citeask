@@ -5,7 +5,7 @@ from typing import Optional
 import gradio as gr
 import pluggy
 from ktem import extension_protocol
-from ktem.assets import PDFJS_PREBUILT_DIR, KotaemonTheme
+from ktem.assets import PDFJS_PREBUILT_DIR, KotaemonTheme, load_css, read_js
 from ktem.components import reasonings
 from ktem.exceptions import HookAlreadyDeclared, HookNotDeclared
 from ktem.index import IndexManager
@@ -45,21 +45,20 @@ class BaseApp:
         self._theme = KotaemonTheme()
 
         dir_assets = Path(__file__).parent / "assets"
-        with (dir_assets / "css" / "main.css").open() as fi:
-            self._css = fi.read()
-        with (dir_assets / "js" / "main.js").open() as fi:
-            self._js = fi.read()
-            self._js = self._js.replace("KH_APP_VERSION", self.app_version)
-        with (dir_assets / "js" / "pdf_viewer.js").open(encoding="utf-8") as fi:
-            self._pdf_view_js = fi.read()
-            # workaround for Windows path
-            pdf_js_dist_dir = str(PDFJS_PREBUILT_DIR).replace("\\", "\\\\")
-            self._pdf_view_js = self._pdf_view_js.replace(
-                "PDFJS_PREBUILT_DIR",
-                pdf_js_dist_dir,
-            ).replace("GR_FILE_ROOT_PATH", BASE_PATH)
-        with (dir_assets / "js" / "svg-pan-zoom.min.js").open() as fi:
-            self._svg_js = fi.read()
+        # tokens.css first, then main.css: main.css is written against the tokens
+        self._css = load_css()
+        self._js = read_js("main.js")
+        # Runs in <head>, before first paint: applies the stored/OS colour scheme so
+        # the page never flashes the wrong background (see assets/js/theme_init.js)
+        self._theme_init_js = read_js("theme_init.js")
+        self._pdf_view_js = read_js("pdf_viewer.js")
+        # workaround for Windows path
+        pdf_js_dist_dir = str(PDFJS_PREBUILT_DIR).replace("\\", "\\\\")
+        self._pdf_view_js = self._pdf_view_js.replace(
+            "PDFJS_PREBUILT_DIR",
+            pdf_js_dist_dir,
+        ).replace("GR_FILE_ROOT_PATH", BASE_PATH)
+        self._svg_js = read_js("svg-pan-zoom.min.js")
 
         self._favicon = str(dir_assets / "img" / "favicon.svg")
 
@@ -88,6 +87,8 @@ class BaseApp:
         """Run ``script`` in ``<head>``, before the bundled JavaScript.
 
         Used to publish the UI translation catalog as ``window.__KTEM_t``.
+        ``assets/js/theme_init.js`` is appended after it by :meth:`make`, because
+        the colour scheme has to be applied before the first paint.
 
         Note: this cannot be prepended to ``js``. Gradio wraps that value as a
         single *function expression* — ``let result = await (${js})()`` — so any
@@ -211,10 +212,16 @@ class BaseApp:
             "</script>"
             "<link rel='stylesheet' href='https://cdnjs.cloudflare.com/ajax/libs/tributejs/5.1.3/tribute.css'/>"  # noqa
         )
-        # The catalog must exist before main.js runs; <head> is plain HTML and is
-        # not subject to the function-expression wrapping of the `js` argument.
-        if self._head_script:
-            external_js = f"<script>{self._head_script}</script>{external_js}"
+        # Scripts that must exist before the bundled JavaScript runs, concatenated in
+        # one pure-JS string: the translation catalog (main.js calls __KTEM_t) and the
+        # colour-scheme bootstrap (must apply before first paint). ``head=`` is plain
+        # HTML, so — unlike ``js=`` — it is not wrapped as a function expression; the
+        # single <script> tag below is the only one allowed here.
+        head_script = "\n".join(
+            part for part in (self._head_script, self._theme_init_js) if part
+        )
+        if head_script:
+            external_js = f"<script>{head_script}</script>{external_js}"
 
         with gr.Blocks(
             theme=self._theme,

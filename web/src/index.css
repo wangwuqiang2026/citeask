@@ -1,0 +1,322 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Design tokens (MODIFICATIONS §5.25). HSL triplets so Tailwind opacity
+ * modifiers work. Light: canvas #F6F7F9 / panel #FFFFFF / border #E5E7EB /
+ * text #111827 / muted #4B5563 / accent #4F46E5.
+ * Dark: canvas #0B0D12 / panel #12151C / border #242A36 / text #E7E9EE /
+ * accent #818CF8.
+ */
+:root {
+  --canvas: 220 14% 96.5%;
+  --panel: 0 0% 100%;
+  --elevated: 220 14% 98%;
+  --border: 220 13% 91%;
+  --fg: 221 39% 11%;
+  --muted: 220 9% 34%;
+  --subtle: 220 9% 46%;
+  --accent: 243 75% 59%;
+  --accent-hover: 243 75% 52%;
+  --accent-soft: 243 100% 97%;
+  --accent-fg: 0 0% 100%;
+  --danger: 0 72% 51%;
+  --success: 142 71% 45%;
+  --ring: 243 75% 59%;
+}
+
+.dark {
+  --canvas: 228 24% 6%;
+  --panel: 222 21% 9%;
+  --elevated: 222 18% 13%;
+  --border: 221 20% 18%;
+  --fg: 220 21% 92%;
+  --muted: 220 12% 66%;
+  --subtle: 220 10% 58%;
+  --accent: 234 89% 74%;
+  --accent-hover: 234 89% 80%;
+  --accent-soft: 234 45% 17%;
+  --accent-fg: 228 24% 8%;
+  --danger: 0 84% 68%;
+  --success: 142 60% 55%;
+  --ring: 234 89% 74%;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-canvas font-sans text-base text-fg antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: hsl(var(--accent) / 0.18);
+  }
+
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+
+  button {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer utilities {
+  .scroll-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+
+  .scroll-thin::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  .scroll-thin::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background-clip: content-box;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* ---------------------------------------------------------------- markdown */
+
+.md {
+  @apply text-md leading-relaxed text-fg;
+  overflow-wrap: anywhere;
+}
+
+.md > * + * {
+  margin-top: 12px;
+}
+
+.md h1,
+.md h2,
+.md h3,
+.md h4 {
+  @apply font-semibold text-fg;
+  line-height: 1.35;
+}
+
+.md h1 {
+  @apply text-lg;
+}
+
+.md h2 {
+  @apply text-md;
+}
+
+.md h3,
+.md h4 {
+  @apply text-base;
+}
+
+.md ul {
+  @apply list-disc space-y-1 pl-5;
+}
+
+.md ol {
+  @apply list-decimal space-y-1 pl-5;
+}
+
+.md li > p {
+  margin: 0;
+}
+
+.md a {
+  @apply text-accent underline underline-offset-2;
+}
+
+.md strong {
+  @apply font-semibold;
+}
+
+.md blockquote {
+  @apply border-l-2 pl-3 text-muted;
+}
+
+.md code {
+  @apply rounded-sm px-1 py-0.5 font-mono text-xs;
+  background: hsl(var(--elevated));
+  border: 1px solid hsl(var(--border));
+}
+
+.md pre {
+  @apply overflow-x-auto rounded-md border p-3;
+  background: hsl(var(--elevated));
+}
+
+.md pre code {
+  @apply border-0 bg-transparent p-0 text-xs;
+}
+
+.md table {
+  @apply w-full border-collapse text-sm;
+}
+
+.md th,
+.md td {
+  @apply border px-2 py-1 text-left align-top;
+}
+
+.md th {
+  background: hsl(var(--elevated));
+  @apply font-medium;
+}
+
+.md hr {
+  @apply border-t;
+}
+
+.md img {
+  @apply max-w-full rounded-md;
+}
+
+.md input[type="checkbox"] {
+  @apply mr-1 align-middle;
+}
+
+/* Citation markers inside an answer (rendered by Markdown.tsx). */
+.citation-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  margin: 0 1px;
+  border-radius: 6px;
+  border: 1px solid hsl(var(--accent) / 0.25);
+  background: hsl(var(--accent) / 0.1);
+  color: hsl(var(--accent));
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  vertical-align: 1px;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.citation-chip:hover {
+  background: hsl(var(--accent) / 0.2);
+}
+
+.citation-chip[data-active="true"] {
+  background: hsl(var(--accent));
+  border-color: hsl(var(--accent));
+  color: hsl(var(--accent-fg));
+}
+
+/* Streaming caret at the end of the answer being written. */
+.stream-cursor::after {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 15px;
+  margin-left: 2px;
+  vertical-align: -2px;
+  background: hsl(var(--accent));
+  animation: stream-blink 1s steps(2, start) infinite;
+}
+
+/* Same caret, appended inline after the last block of a markdown answer. */
+.streaming .md > :last-child::after {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 15px;
+  margin-left: 3px;
+  vertical-align: -2px;
+  background: hsl(var(--accent));
+  animation: stream-blink 1s steps(2, start) infinite;
+}
+
+@keyframes stream-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* highlight.js token colours, mapped onto the palette (no external theme CSS). */
+.hljs-comment,
+.hljs-quote {
+  color: hsl(var(--subtle));
+  font-style: italic;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-section,
+.hljs-link {
+  color: hsl(var(--accent));
+}
+
+.hljs-string,
+.hljs-title,
+.hljs-name,
+.hljs-type,
+.hljs-attribute,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-addition,
+.hljs-variable,
+.hljs-template-tag,
+.hljs-template-variable {
+  color: hsl(var(--success));
+}
+
+.hljs-number,
+.hljs-meta,
+.hljs-built_in,
+.hljs-builtin-name,
+.hljs-params {
+  color: hsl(28 80% 48%);
+}
+
+.hljs-deletion {
+  color: hsl(var(--danger));
+}
+
+/* react-resizable-panels handles: a hairline that turns accent on hover. */
+[data-panel-resize-handle-enabled] {
+  width: 1px;
+  background: hsl(var(--border));
+  transition: background 120ms ease;
+}
+
+[data-panel-resize-handle-enabled]:hover,
+[data-panel-resize-handle-enabled][data-resize-handle-active] {
+  background: hsl(var(--accent));
+}

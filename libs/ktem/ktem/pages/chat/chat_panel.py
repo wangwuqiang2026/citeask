@@ -29,6 +29,8 @@ class ChatPanel(BasePage):
             placeholder=PLACEHOLDER_TEXT,
             show_label=False,
             elem_id="main-chat-bot",
+            elem_classes=["chat-stream"],
+            container=False,
             show_copy_button=True,
             likeable=True,
             bubble_full_width=False,

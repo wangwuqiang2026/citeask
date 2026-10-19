@@ -28,6 +28,13 @@ if not KH_APP_VERSION:
         KH_APP_VERSION = "local"
 
 KH_GRADIO_SHARE = config("KH_GRADIO_SHARE", default=False, cast=bool)
+# The React application is the default UI (served at `/`, with the classic Gradio
+# app at `/legacy`). Set KH_WEB_UI=0 to go back to serving only Gradio at `/` -
+# the rollback switch for the front-end migration (MODIFICATIONS §5.25).
+KH_WEB_UI = config("KH_WEB_UI", default=True, cast=bool)
+# Signing key of the web session cookie. Empty = a random key persisted under
+# ktem_app_data/session.key on first start.
+KH_SESSION_SECRET = config("KH_SESSION_SECRET", default="")
 # Open the browser when the app finishes starting. The Windows launcher sets this to 0
 # and opens the page itself once the port answers 200 — opening too early lands on a
 # "connection refused" tab, and on some hosts `webbrowser.open` does nothing at all
@@ -176,10 +183,22 @@ KH_ROUTING_ENTITY_CANDIDATES = config(
     "KH_ROUTING_ENTITY_CANDIDATES", default=30, cast=int
 )
 # A 10k-chunk spreadsheet added to the search scope takes over the candidate list even
-# when one of its rows holds the answer (MODIFICATIONS 5.13/5.20), so entity routing only
-# adds files below this many chunks; 0 means "any size".
+# when one of its rows holds the answer (MODIFICATIONS 5.13/5.20), so entity routing
+# only adds files below this many chunks; 0 means "any size".
 KH_ROUTING_ENTITY_MAX_CHUNKS = config(
     "KH_ROUTING_ENTITY_MAX_CHUNKS", default=500, cast=int
+)
+# Entity row lookup: a question that names one person is a *row* lookup, and the row is
+# not what a vector query ranks first (the rules notice scores 0.58, the row 0.35), so
+# the chunk that names the entity is promoted into the context instead of being ranked
+# for. A row identifier is a term that occupies a table *cell* (never prose, and never
+# an award column that repeats down a chunk); 0 disables the pass (MODIFICATIONS 5.21).
+KH_ENTITY_ROWS = config("KH_ENTITY_ROWS", default=3, cast=int)
+# Optional cap on how many full-text chunks may carry the identifier (0 = no cap: a
+# student who appears in ten tables is still a row identifier; KH_ENTITY_ROWS already
+# bounds how many chunks are promoted).
+KH_ENTITY_ROW_MAX_CHUNKS = config(
+    "KH_ENTITY_ROW_MAX_CHUNKS", default=0, cast=int
 )
 # Per-query trace (ROADMAP C4): one JSON line per question with retrieved count, best
 # similarity, refusal flag, latency and the LLM usage that request consumed. Empty =

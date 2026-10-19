@@ -1,5 +1,52 @@
-:root {
-  --main-area-height: calc(100vh - 110px);
+/* citeask — application shell, workspace and component styling.
+ *
+ * Colour values live exclusively in tokens.css (`--ui-*`); this file never defines
+ * one. Gradio renders most of the DOM, so the rules here are layered on top of its
+ * component classes (`.tabs`, `.tab-nav`, `.block`, `.message-row`, …) and are kept
+ * additive where Gradio's own layout still applies.
+ *
+ * Section map:
+ *    1. base & reset
+ *    2. shell & navigation
+ *    3. workspace: three columns
+ *    4. sidebar
+ *    5. chat stream, bubbles, composer
+ *    6. evidence panel
+ *    7. tables, uploads, forms
+ *    8. empty states, chips, shared classes, toasts, modal
+ *    9. responsive
+ *   10. accessibility
+ *   11. Python-facing utility classes
+ */
+
+/* ==========================================================================
+   1. base & reset
+   ========================================================================== */
+
+html,
+body {
+  background: var(--ui-bg);
+  color: var(--ui-fg);
+}
+
+body {
+  font-family: var(--ui-font-sans);
+  font-size: var(--ui-text-md);
+  line-height: var(--ui-leading-normal);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.gradio-container {
+  max-width: 100% !important;
+  width: 100% !important;
+  background: transparent !important;
+  color: var(--ui-fg);
+}
+
+.gradio-container .main {
+  background: transparent;
+  padding: 0;
 }
 
 /* no footer */
@@ -7,57 +54,214 @@ footer {
   display: none !important;
 }
 
+::selection {
+  background: var(--ui-accent-soft);
+  color: var(--ui-fg);
+}
+
+mark {
+  background: var(--ui-mark-bg);
+  color: var(--ui-mark-fg);
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
 /* customize scrollbar */
 ::-webkit-scrollbar {
-  background: var(--background-fill-primary);
+  width: 10px;
+  height: 10px;
+  background: transparent;
 }
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 ::-webkit-scrollbar-thumb {
-  background-color: var(--border-color-primary);
-  border: 4px solid transparent;
-  border-radius: 100px;
+  background-color: var(--ui-border-strong);
+  border: 3px solid transparent;
+  border-radius: var(--ui-radius-pill);
   background-clip: content-box;
 }
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--ui-fg-3);
+}
+
 ::-webkit-scrollbar-corner {
-  background: var(--background-fill-primary);
+  background: transparent;
 }
 
-.gradio-container {
-  max-width: 100% !important;
-  /* overflow: scroll !important;
-  height: 100% !important; */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ui-border-strong) transparent;
 }
 
-/* styling for header bar */
-.header-bar {
-  background-color: transparent;
-  margin: 0px 0px 20px;
-  overflow-x: scroll;
-  display: block !important;
-  text-wrap: nowrap;
-  border: none;
-}
-.header-bar button.selected {
-  border: none;
+/* ==========================================================================
+   2. shell & navigation
+   ========================================================================== */
 
-  /* an alternative header bar style with rounded background */
-  /* background-color: var(--background-fill-primary);
-  border: 4px solid transparent;
-  border-radius: var(--radius-lg);
-  background-clip: padding-box; */
+#app-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--ui-bg);
 }
 
-/* selected buttons have highlighted text */
-button.selected {
-  color: var(--block-label-text-color);
-  font-weight: bold;
+#app-shell > * {
+  flex-shrink: 0;
 }
 
-.message-row.bubble.bot-row{
+/* sticky application header: brand on the left, actions on the right */
+#app-header {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ui-space-3);
+  height: var(--ui-header-h);
+  min-height: var(--ui-header-h);
+  margin: 0;
+  padding: 0 var(--ui-page-pad);
+  background: var(--ui-surface);
+  border-bottom: 1px solid var(--ui-border);
+  box-shadow: var(--ui-shadow-1);
+  position: sticky;
+  top: 0;
+  z-index: var(--ui-z-sticky);
+}
+
+#app-header > .block,
+#app-header .html,
+#app-header-actions .block {
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  min-width: 0 !important;
+}
+
+#app-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-2);
+  min-width: 0;
+}
+
+/* main.py renders the brand as an HTML block; `.app-brand` is the row it emits */
+.app-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-2);
+  min-width: 0;
+}
+
+.app-brand-mark {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  border-radius: var(--ui-radius-sm);
+  object-fit: contain;
+}
+
+.app-brand-name {
+  font-size: var(--ui-text-lg);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: var(--ui-leading-tight);
+  color: var(--ui-fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#app-version {
+  flex: 0 0 auto;
+}
+
+#app-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--ui-space-1);
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+/* tab bar */
+#app-tabs {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  background: transparent;
+}
+
+#app-tabs > .tab-nav {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: var(--ui-space-1);
+  height: var(--ui-nav-h);
+  min-height: var(--ui-nav-h);
+  margin: 0;
+  padding: 0 var(--ui-page-pad);
+  border-bottom: 1px solid var(--ui-border);
+  background: var(--ui-surface);
+  position: sticky;
+  top: var(--ui-header-h);
+  z-index: var(--ui-z-sticky);
   overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
-.flex-wrap.bot {
-  overflow-x: inherit;
+#app-tabs > .tab-nav::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+#app-tabs > .tab-nav button {
+  margin: 0;
+  padding: var(--ui-space-1) var(--ui-space-3);
+  height: 32px;
+  border: 1px solid transparent;
+  border-radius: var(--ui-radius-md);
+  background: transparent;
+  color: var(--ui-fg-3);
+  font-family: inherit;
+  font-size: var(--ui-text-md);
+  font-weight: 500;
+  line-height: var(--ui-leading-tight);
+  white-space: nowrap;
+  transition: background var(--ui-dur-1) var(--ui-ease),
+    color var(--ui-dur-1) var(--ui-ease);
+}
+
+#app-tabs > .tab-nav button:hover {
+  background: var(--ui-hover);
+  color: var(--ui-fg);
+}
+
+#app-tabs > .tab-nav button.selected {
+  background: var(--ui-accent-soft);
+  border-color: var(--ui-accent-border);
+  color: var(--ui-accent);
+  font-weight: 600;
+}
+
+#app-tabs > .tab-nav .bar {
+  display: none;
+}
+
+#app-tabs > .tabitem {
+  min-height: 0;
+  overflow: hidden;
 }
 
 #chat-tab,
@@ -69,61 +273,587 @@ button.selected {
   border: none !important;
 }
 
+#chat-tab {
+  height: 100%;
+}
+
+#chat-tab > .row,
+#chat-tab > .column {
+  height: 100%;
+}
+
+/* legacy: main.js marks the tab bar of older Gradio builds */
+.header-bar {
+  display: flex !important;
+  align-items: center;
+  gap: var(--ui-space-1);
+  background-color: transparent;
+  margin: 0 0 var(--ui-space-2);
+  padding: 0;
+  overflow-x: auto;
+  text-wrap: nowrap;
+  border: none;
+}
+
+.header-bar button.selected {
+  border: none;
+}
+
+button.selected {
+  color: var(--ui-accent);
+  font-weight: 600;
+}
+
+/* text-dense tabs keep a readable measure */
 #help-tab,
 #settings-tab {
-  /* text-dense view should not be wide for readability */
-  max-width: max(56vw, 900px) !important;
+  max-width: min(var(--ui-reading-max), 92vw) !important;
   margin: 0 auto !important;
+  padding: var(--ui-space-4) var(--ui-page-pad) !important;
 }
 
 .indices-tab,
 #resources-tab {
-  /* Other view should not be too wide */
   border: none !important;
-  /* Was max(70vw, 1200px): on a 1535px screen that left ~230px of empty margin on each
-     side, so wide tables (the file list) had to squeeze their columns. Use most of the
-     window instead, while keeping a readable cap on very large monitors. */
-  max-width: max(92vw, 1400px) !important;
+  max-width: min(var(--ui-content-max), 92vw) !important;
   margin: 0 auto !important;
+  padding: var(--ui-space-4) var(--ui-page-pad) !important;
 }
 
-#main-chat-bot {
-  background: var(--background-fill-primary);
-  flex: auto;
-}
+/* ==========================================================================
+   3. workspace: three columns
+   ========================================================================== */
 
-#chat-area {
-  height: var(--main-area-height) !important;
-  column-gap: 2px !important;
-}
-
-#chat-info-panel {
-  max-height: var(--main-area-height) !important;
-  overflow: auto !important;
-  transition: all 0.4s;
-}
-
-body.dark #chat-info-panel figure>img{
-  filter: invert(100%);
+#chat-workspace {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: var(--ui-space-4);
+  height: var(--main-area-height);
+  margin: 0;
+  padding: var(--ui-space-3) var(--ui-page-pad);
+  overflow: hidden;
 }
 
 #conv-settings-panel {
-  max-height: var(--main-area-height) !important;
-  flex-wrap: unset;
-  overflow-y: scroll !important;
-  position: sticky;
-  column-gap: 2px !important;
-  scrollbar-width: none;
-  /* Firefox */
-  -ms-overflow-style: none;
-  /* Internet Explorer 10+ */
-  transition: all 0.3s;
+  flex: 0 0 auto;
+  width: var(--ui-sidebar-w);
+  min-width: 0;
+  max-width: var(--ui-sidebar-w);
+  max-height: 100% !important;
+  margin: 0;
+  padding: var(--ui-space-3);
+  gap: var(--ui-space-3);
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-lg);
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  transition: width var(--ui-dur-2) var(--ui-ease),
+    max-width var(--ui-dur-2) var(--ui-ease),
+    padding var(--ui-dur-2) var(--ui-ease),
+    border-width var(--ui-dur-1) var(--ui-ease);
+  scrollbar-width: thin;
+  position: relative;
 }
 
-#conv-settings-panel::-webkit-scrollbar {
-  /* WebKit */
-  width: 0;
-  height: 0;
+#conv-settings-panel.is-collapsed {
+  width: 0 !important;
+  min-width: 0 !important;
+  max-width: 0 !important;
+  padding-left: 0;
+  padding-right: 0;
+  border-width: 0;
+  overflow: hidden;
+}
+
+#chat-area {
+  flex: 1 1 0;
+  min-width: 0 !important;
+  height: 100% !important;
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-space-3);
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+#chat-info-panel {
+  flex: 0 1 var(--ui-info-w);
+  width: var(--ui-info-w);
+  min-width: 0 !important;
+  max-width: 50%;
+  max-height: 100% !important;
+  margin: 0;
+  overflow: auto !important;
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-lg);
+  transition: max-width var(--ui-dur-2) var(--ui-ease),
+    flex-basis var(--ui-dur-2) var(--ui-ease);
+}
+
+#main-chat-bot {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-lg);
+  padding: var(--ui-space-2);
+}
+
+/* ==========================================================================
+   4. sidebar
+   ========================================================================== */
+
+#conv-settings-panel h1,
+#conv-settings-panel h2,
+#conv-settings-panel h3 {
+  margin: 0;
+  font-size: var(--ui-text-lg);
+  font-weight: 600;
+  line-height: var(--ui-leading-tight);
+  color: var(--ui-fg);
+  letter-spacing: -0.01em;
+}
+
+#conv-settings-panel .prose,
+#conv-settings-panel p {
+  color: var(--ui-fg-2);
+  font-size: var(--ui-text-md);
+}
+
+.sidebar-card {
+  background: var(--ui-surface-2);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-md);
+  padding: var(--ui-space-3);
+}
+
+.section-title {
+  margin: 0 0 var(--ui-space-2);
+  font-size: var(--ui-text-md);
+  font-weight: 600;
+  line-height: var(--ui-leading-tight);
+  color: var(--ui-fg);
+}
+
+.meta {
+  font-size: var(--ui-text-xs);
+  line-height: var(--ui-leading-normal);
+  color: var(--ui-fg-3);
+}
+
+/* Gradio internals of the side panel: accordsions, dropdowns, checkboxes */
+#conv-settings-panel .label-wrap,
+#chat-area .label-wrap,
+#chat-info-panel .label-wrap {
+  padding: 0;
+  color: var(--ui-fg-2);
+  font-size: var(--ui-text-sm);
+  font-weight: 600;
+}
+
+#conv-settings-panel .label-wrap > span,
+#chat-area .label-wrap > span,
+#chat-info-panel .label-wrap > span {
+  color: var(--ui-fg-2);
+}
+
+#conv-settings-panel .block,
+#chat-area .block {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+#conversation-dropdown {
+  margin: 0;
+}
+
+#conversation-dropdown input {
+  background: var(--ui-surface-2);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-md);
+  color: var(--ui-fg);
+  font-size: var(--ui-text-md);
+  box-shadow: none;
+}
+
+#conversation-dropdown input:focus {
+  border-color: var(--ui-accent-border);
+  box-shadow: 0 0 0 3px var(--ui-focus-ring);
+}
+
+#suggest-chat-checkbox,
+#is-public-checkbox {
+  color: var(--ui-fg-2);
+  font-size: var(--ui-text-sm);
+}
+
+#is-public-checkbox {
+  margin: 0;
+}
+
+#quick-setting-labels {
+  margin-top: var(--ui-space-2);
+  margin-bottom: calc(-1 * var(--ui-space-2));
+  color: var(--ui-fg-3);
+  font-size: var(--ui-text-xs);
+}
+
+#quick-setting-labels .prose,
+#quick-setting-labels p {
+  margin: 0;
+  color: var(--ui-fg-3);
+  font-size: var(--ui-text-xs);
+}
+
+/* the three chat-setting dropdowns share one row; their labels sit above it */
+#quick-setting-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: center;
+  gap: var(--ui-space-2);
+}
+
+#quick-setting-row > * {
+  min-width: 0 !important;
+}
+
+/* extras (citation mode, mindmap) stay in normal flow under the grid */
+#quick-setting-extras {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ui-space-2);
+  margin-top: var(--ui-space-1);
+}
+
+#use-mindmap-checkbox {
+  color: var(--ui-fg-2);
+  font-size: var(--ui-text-sm);
+}
+
+#citation-dropdown {
+  min-width: 160px;
+  max-width: 240px;
+}
+
+/* ==========================================================================
+   5. chat stream, bubbles, composer
+   ========================================================================== */
+
+#main-chat-bot .message-wrap {
+  gap: var(--ui-space-1);
+}
+
+#main-chat-bot .message {
+  color: var(--ui-fg);
+  font-size: var(--ui-text-md);
+  line-height: var(--ui-leading-prose);
+}
+
+#main-chat-bot .message .prose {
+  font-size: var(--ui-text-md);
+  line-height: var(--ui-leading-prose);
+}
+
+.message-row.bubble.bot-row {
+  overflow-x: auto;
+}
+
+.flex-wrap.bot {
+  overflow-x: inherit;
+}
+
+#main-chat-bot .message-row.bubble {
+  margin: var(--ui-space-2) var(--ui-space-2) !important;
+}
+
+#main-chat-bot .message-row.bubble.bot-row {
+  align-self: flex-start;
+  max-width: calc(100% - var(--ui-space-6));
+}
+
+#main-chat-bot .message-row.bubble.user-row {
+  align-self: flex-end;
+}
+
+/* user bubble: solid accent */
+.message-wrap .flex-wrap.user {
+  background: var(--ui-accent) !important;
+  border-color: var(--ui-accent) !important;
+  color: var(--ui-on-accent);
+  border-radius: var(--ui-radius-lg) var(--ui-radius-lg) var(--ui-radius-sm)
+    var(--ui-radius-lg);
+  box-shadow: var(--ui-shadow-1);
+}
+
+.message-wrap .flex-wrap.user *,
+.message-wrap .flex-wrap.user p,
+.message-wrap .flex-wrap.user a {
+  color: var(--ui-on-accent);
+}
+
+/* bot bubble: quiet surface */
+.message-wrap :not(.component-wrap).flex-wrap.bot {
+  background: var(--ui-surface-2) !important;
+  border-color: var(--ui-border) !important;
+  color: var(--ui-fg);
+  border-radius: var(--ui-radius-lg) var(--ui-radius-lg) var(--ui-radius-lg)
+    var(--ui-radius-sm);
+  box-shadow: none;
+}
+
+.message-wrap .bot table,
+.message-wrap .bot th,
+.message-wrap .bot td {
+  border-color: var(--ui-border) !important;
+}
+
+.message-wrap .bot th {
+  background: var(--ui-surface);
+}
+
+.message .message-buttons,
+.message-buttons-right {
+  display: none !important;
+}
+
+/* composer */
+#chat-input {
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-lg);
+  box-shadow: var(--ui-shadow-1);
+  transition: border-color var(--ui-dur-1) var(--ui-ease),
+    box-shadow var(--ui-dur-1) var(--ui-ease);
+}
+
+#chat-input:focus-within {
+  border-color: var(--ui-accent-border);
+  box-shadow: 0 0 0 3px var(--ui-focus-ring);
+}
+
+#chat-input textarea,
+#chat-input input {
+  background: transparent;
+  color: var(--ui-fg);
+  font-family: var(--ui-font-sans);
+  font-size: var(--ui-text-md);
+  line-height: var(--ui-leading-normal);
+  box-shadow: none;
+}
+
+#chat-input textarea::placeholder,
+#chat-input input::placeholder {
+  color: var(--ui-fg-3);
+}
+
+#chat-suggestion {
+  max-height: 350px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-md);
+  overflow: hidden;
+}
+
+#chat-suggestion table {
+  overflow: hidden;
+}
+
+#chat-suggestion table thead {
+  display: none;
+}
+
+#paper-suggestion table {
+  overflow: hidden;
+}
+
+/* mindmap + markdown extras inside messages */
+svg.markmap {
+  width: 100%;
+  height: 100%;
+  font-family: var(--ui-font-sans);
+  font-size: var(--ui-text-sm);
+}
+
+div.markmap {
+  height: 400px;
+}
+
+#mindmap-toggle,
+#mindmap-export {
+  color: var(--ui-accent);
+  font-size: var(--ui-text-xs);
+  text-decoration: none;
+}
+
+/* tribute pop-up for file tagging in the chat input */
+.tribute-container ul {
+  background-color: var(--ui-surface) !important;
+  color: var(--ui-fg) !important;
+  font-family: var(--ui-font-sans);
+  font-size: var(--ui-text-md);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-md);
+  box-shadow: var(--ui-shadow-2);
+}
+
+.tribute-container li.highlight {
+  background-color: var(--ui-hover) !important;
+}
+
+/* ==========================================================================
+   6. evidence panel
+   ========================================================================== */
+
+#info-expand {
+  position: relative;
+  padding: var(--ui-space-3);
+}
+
+#html-info-panel {
+  overflow-x: auto !important;
+  color: var(--ui-fg-2);
+  font-size: var(--ui-text-sm);
+  line-height: var(--ui-leading-prose);
+}
+
+/* The evidence markup is produced by utils/render.py; its nesting is load-bearing
+ * for fullTextSearch() (#html-info-panel > div:last-child > div > details.evidence
+ * div.evidence-content) — style it, never restructure it. */
+#html-info-panel details.evidence {
+  margin: var(--ui-space-2) 0;
+  padding: var(--ui-space-2) var(--ui-space-3);
+  background: var(--ui-surface-2);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-md);
+  animation: fadein var(--ui-dur-2) var(--ui-ease) forwards;
+}
+
+#html-info-panel details.evidence details.evidence {
+  margin: var(--ui-space-1) 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+}
+
+#html-info-panel details.evidence > summary {
+  cursor: pointer;
+  color: var(--ui-fg);
+  font-size: var(--ui-text-sm);
+  font-weight: 600;
+  line-height: var(--ui-leading-tight);
+  overflow-wrap: anywhere;
+}
+
+#html-info-panel details.evidence > summary:hover {
+  color: var(--ui-accent);
+}
+
+#html-info-panel details.evidence > summary b,
+#html-info-panel details.evidence .evidence-content b {
+  font-weight: 600;
+  color: var(--ui-fg);
+}
+
+#html-info-panel .evidence-content {
+  color: var(--ui-fg-2);
+  font-size: var(--ui-text-sm);
+  line-height: var(--ui-leading-prose);
+  overflow-wrap: anywhere;
+}
+
+#html-info-panel .evidence-content p {
+  margin: 0 0 var(--ui-space-2);
+}
+
+#html-info-panel .evidence-content p:last-child {
+  margin-bottom: 0;
+}
+
+#html-info-panel .evidence-content ul,
+#html-info-panel .evidence-content ol {
+  margin: 0 0 var(--ui-space-2);
+  padding-left: var(--ui-space-5);
+}
+
+#html-info-panel .evidence-content img {
+  max-width: 100%;
+  border-radius: var(--ui-radius-sm);
+}
+
+#html-info-panel .pdf-link,
+#html-info-panel a {
+  color: var(--ui-accent);
+  text-decoration: none;
+  font-size: var(--ui-text-xs);
+}
+
+#html-info-panel .pdf-link:hover,
+#html-info-panel a:hover {
+  color: var(--ui-accent-hover);
+  text-decoration: underline;
+}
+
+#html-info-panel figure {
+  margin: 0 0 var(--ui-space-2);
+}
+
+#html-info-panel figcaption {
+  color: var(--ui-fg-3);
+  font-size: var(--ui-text-xs);
+}
+
+html.dark #chat-info-panel figure > img,
+body.dark #chat-info-panel figure > img {
+  filter: invert(100%);
+}
+
+/* inline citations in answers */
+.message a.citation {
+  color: var(--ui-accent);
+  text-decoration: none;
+  border-bottom: 1px dashed var(--ui-accent-border);
+}
+
+.message a.citation:hover {
+  color: var(--ui-accent-hover);
+}
+
+/* ==========================================================================
+   7. tables, uploads, forms
+   ========================================================================== */
+
+#app-tabs table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: var(--ui-text-sm);
+  color: var(--ui-fg);
+}
+
+#app-tabs th {
+  padding: var(--ui-space-2) var(--ui-space-3);
+  background: var(--ui-surface-2);
+  color: var(--ui-fg-2);
+  font-weight: 600;
+  text-align: left;
+  border-bottom: 1px solid var(--ui-border);
+}
+
+#app-tabs td {
+  padding: var(--ui-space-2) var(--ui-space-3);
+  border-bottom: 1px solid var(--ui-border);
+  color: var(--ui-fg);
+  vertical-align: middle;
+}
+
+#app-tabs tbody tr:hover td {
+  background: var(--ui-hover);
 }
 
 td {
@@ -131,68 +861,9 @@ td {
   overflow: hidden;
 }
 
-.setting-answer-mode-description {
-  margin: 5px 5px 2px !important;
-}
-
-.message-buttons-right {
-  display: none !important;
-}
-
-mark {
-  background-color: #10b981;
-}
-
-/* clpse */
-.clpse {
-  background-color: var(--background-fill-secondary);
-  font-weight: bold;
-  cursor: pointer;
-  padding: 3px;
-  width: 100%;
-  border: none;
-  text-align: left;
-  outline: none;
-}
-
-/* for setting transparent background for elements */
-.no-background {
-  background-color: transparent;
-  border: none;
-}
-
-/* for setting bold text for elements */
-.bold-text {
-  font-weight: bold;
-}
-
-/* for setting highlighted text for elements */
-.body-text-color {
-  color: var(--body-text-color);
-}
-
-/* for setting right-aligned buttons */
-.right-button {
-  min-width: 200px !important;
-  width: fit-content;
-  padding-left: 20px;
-  padding-right: 20px;
-  margin: 0px 0px 0px auto;
-}
-
-/* for setting height limit for buttons */
-.cap-button-height {
-  max-height: 42px;
-}
-
-/* Hide sort buttons at gr.DataFrame */
-.sort-button {
-  display: none !important;
-}
-
-/* Show sort button only in File list*/
-#file_list_view .sort-button {
-  display: block !important;
+/* a fix for flickering background in Gradio DataFrame */
+tbody:not(.row_odd) {
+  background: var(--table-even-background-fill);
 }
 
 /* File table: one line per row. Columns are percentage-based, so the table never grows
@@ -219,28 +890,95 @@ mark {
   min-width: 0 !important;
 }
 
-#toggle-dark-button {
-  position: fixed;
-  top: 6px;
-  right: 30px;
+#file_list_view table td,
+#file_list_view table th {
+  font-size: var(--ui-text-sm);
 }
 
-#info-expand-button {
-  position: absolute;
-  top: 6px;
-  right: 15px;
+/* upload areas */
+.upload-button {
+  display: none;
 }
 
-/* prevent overflow of html info panel */
-#html-info-panel {
-  overflow-x: auto !important;
+#quick-file {
+  height: 110px;
 }
 
-#chat-expand-button {
-  position: absolute;
-  top: 6px;
-  right: -10px;
-  z-index: 1;
+#quick-url textarea {
+  resize: none;
+  background: transparent;
+  margin-top: 0;
+  color: var(--ui-fg);
+}
+
+#quick-url textarea::placeholder {
+  text-align: center;
+  color: var(--ui-fg-3);
+}
+
+#index-upload,
+.file-drop-area,
+.file-preview,
+.upload-area {
+  background: var(--ui-surface-2);
+  border: 1px dashed var(--ui-border-strong);
+  border-radius: var(--ui-radius-md);
+  color: var(--ui-fg-2);
+}
+
+#index-upload:hover,
+.file-drop-area:hover {
+  border-color: var(--ui-accent-border);
+  background: var(--ui-hover);
+}
+
+#upload-progress progress,
+progress {
+  accent-color: var(--ui-accent);
+}
+
+#file-toolbar,
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ui-space-2);
+}
+
+#file-selection {
+  color: var(--ui-fg-2);
+  font-size: var(--ui-text-sm);
+}
+
+#chunk-panel {
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-md);
+  padding: var(--ui-space-3);
+}
+
+/* forms & inputs */
+.form {
+  gap: var(--ui-space-3);
+}
+
+.block label,
+.block .label-wrap > span,
+.block > label > span {
+  color: var(--ui-fg-2);
+  font-size: var(--ui-text-sm);
+  font-weight: 500;
+}
+
+input,
+textarea,
+select {
+  font-family: var(--ui-font-sans);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--ui-fg-3);
 }
 
 #save-setting-btn {
@@ -249,46 +987,567 @@ mark {
   min-width: 100px !important;
 }
 
-#quick-setting-labels {
-  margin-top: 5px;
-  margin-bottom: -10px;
+.setting-answer-mode-description {
+  margin: var(--ui-space-1) var(--ui-space-1) 2px !important;
+  color: var(--ui-fg-3);
+  font-size: var(--ui-text-sm);
 }
 
-#use-mindmap-checkbox {
-  position: absolute;
-  width: 110px;
-  top: 10px;
-  right: 25px;
+#report-accordion textarea {
+  background: var(--ui-surface-2);
+  color: var(--ui-fg);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-md);
 }
 
-#citation-dropdown {
-  width: min(25%, 100px);
-  position: absolute;
-  top: 2px;
-  left: 120px;
-  height: 35px;
+/* login: a centred card; the page itself is a Column with id="login-card" */
+#login-card {
+  width: 100%;
+  max-width: 400px;
+  margin: var(--ui-space-8) auto;
+  padding: var(--ui-space-6);
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-lg);
+  box-shadow: var(--ui-shadow-2);
 }
 
-#quick-url textarea {
-  resize: none;
-  background: transparent;
-  margin-top: 0px;
+#login-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--ui-space-2);
+  margin-bottom: var(--ui-space-2);
 }
 
-#quick-url textarea::placeholder {
+#login-subtitle {
+  margin-bottom: var(--ui-space-4);
+  color: var(--ui-fg-3);
+  font-size: var(--ui-text-sm);
+}
+
+/* PDF preview inside the evidence column */
+pdfjs-viewer-element {
+  height: 100vh;
+  height: 100dvh;
+}
+
+/* ==========================================================================
+   8. empty states, chips, shared classes, toasts, modal
+   ========================================================================== */
+
+.empty-state {
+  padding: var(--ui-space-5);
+  border: 1px dashed var(--ui-border);
+  border-radius: var(--ui-radius-md);
+  background: var(--ui-surface-2);
   text-align: center;
 }
 
-#quick-file {
-  height: 110px;
+.empty-state-title {
+  margin: 0 0 var(--ui-space-1);
+  font-size: var(--ui-text-md);
+  font-weight: 600;
+  line-height: var(--ui-leading-tight);
+  color: var(--ui-fg);
 }
 
-span.icon {
-  color: #cecece;
+.empty-state-hint {
+  margin: 0;
+  font-size: var(--ui-text-sm);
+  line-height: 1.6;
+  color: var(--ui-fg-3);
 }
 
-.upload-button {
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--ui-radius-pill);
+  background: var(--ui-surface-2);
+  border: 1px solid var(--ui-border);
+  color: var(--ui-fg-3);
+  font-size: var(--ui-text-xs);
+  line-height: var(--ui-leading-normal);
+  white-space: nowrap;
+}
+
+.chip-label {
+  color: var(--ui-fg-3);
+  font-weight: 500;
+}
+
+.chip-value {
+  color: var(--ui-fg-2);
+  font-family: var(--ui-font-mono);
+  font-size: var(--ui-text-xs);
+}
+
+#app-version.chip {
+  color: var(--ui-fg-3);
+}
+
+#app-version .chip-value {
+  color: var(--ui-fg-2);
+}
+
+.panel-card {
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-md);
+  padding: var(--ui-space-3);
+  box-shadow: var(--ui-shadow-1);
+}
+
+.chat-stream {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ui-space-2);
+  min-height: 0;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+}
+
+/* icon-only buttons: header actions, sidebar toggles, conversation actions.
+ * `img.button-icon` is Gradio's own node (Button.svelte). */
+button.icon-button,
+#toggle-dark-button,
+#chat-expand-button,
+#info-expand-button,
+#rename-conv-button,
+#delete-conv-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  min-width: 32px !important;
+  width: 32px;
+  height: 32px;
+  padding: 0 !important;
+  border: 1px solid transparent !important;
+  border-radius: var(--ui-radius-md) !important;
+  background: transparent !important;
+  color: var(--ui-fg-3) !important;
+  box-shadow: none !important;
+  transition: background var(--ui-dur-1) var(--ui-ease),
+    color var(--ui-dur-1) var(--ui-ease);
+}
+
+button.icon-button:hover,
+#toggle-dark-button:hover,
+#chat-expand-button:hover,
+#info-expand-button:hover,
+#rename-conv-button:hover,
+#delete-conv-button:hover {
+  background: var(--ui-hover) !important;
+  color: var(--ui-fg) !important;
+}
+
+button.icon-button:active,
+#toggle-dark-button:active,
+#chat-expand-button:active,
+#info-expand-button:active,
+#rename-conv-button:active,
+#delete-conv-button:active {
+  background: var(--ui-active) !important;
+}
+
+button.icon-button:disabled,
+#toggle-dark-button:disabled,
+#chat-expand-button:disabled,
+#info-expand-button:disabled,
+#rename-conv-button:disabled,
+#delete-conv-button:disabled {
+  background: transparent !important;
+  color: var(--ui-border-strong) !important;
+  cursor: not-allowed;
+}
+
+.icon-button img.button-icon,
+#toggle-dark-button img.button-icon,
+#chat-expand-button img.button-icon,
+#info-expand-button img.button-icon,
+#rename-conv-button img.button-icon,
+#delete-conv-button img.button-icon {
+  width: 18px;
+  height: 18px;
+  margin-right: 0;
+}
+
+/* "New chat" carries a label, so it is a text button with an icon rather than an
+ * icon-only square: the label must not be clipped. */
+#new-conv-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: auto;
+  min-width: 100px !important;
+  height: 32px;
+  padding: 0 12px !important;
+  border: 1px solid var(--ui-border) !important;
+  border-radius: var(--ui-radius-md) !important;
+  background: var(--ui-surface) !important;
+  color: var(--ui-fg) !important;
+  box-shadow: none !important;
+  font-size: var(--ui-text-sm);
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background var(--ui-dur-1) var(--ui-ease),
+    border-color var(--ui-dur-1) var(--ui-ease);
+}
+
+#new-conv-button:hover {
+  background: var(--ui-hover) !important;
+  border-color: var(--ui-border-strong) !important;
+  color: var(--ui-fg) !important;
+}
+
+#new-conv-button:active {
+  background: var(--ui-active) !important;
+}
+
+#new-conv-button img.button-icon {
+  width: 16px;
+  height: 16px;
+  margin-right: 0;
+  flex: 0 0 auto;
+}
+
+#toggle-dark-button[aria-pressed="true"] {
+  color: var(--ui-accent) !important;
+}
+
+/* the buttons are placed by main.js inside these containers */
+#info-expand-button {
+  position: absolute;
+  top: var(--ui-space-2);
+  right: var(--ui-space-2);
+  z-index: var(--ui-z-popover);
+}
+
+#chat-expand-button {
+  position: absolute;
+  top: var(--ui-space-2);
+  right: var(--ui-space-2);
+  z-index: var(--ui-z-popover);
+}
+
+#main-chat-bot > #chat-expand-button {
+  right: var(--ui-space-2);
+}
+
+/* toasts */
+.toast-wrap,
+.toast-container {
+  z-index: var(--ui-z-popover);
+}
+
+.toast-body {
+  background: var(--ui-surface) !important;
+  color: var(--ui-fg) !important;
+  border: 1px solid var(--ui-border) !important;
+  border-radius: var(--ui-radius-md) !important;
+  box-shadow: var(--ui-shadow-2) !important;
+  font-family: var(--ui-font-sans);
+  font-size: var(--ui-text-sm);
+  line-height: var(--ui-leading-normal);
+}
+
+.toast-body.error,
+.toast-body.warning {
+  border-color: var(--ui-danger) !important;
+  background: var(--ui-danger-soft) !important;
+  color: var(--ui-danger) !important;
+}
+
+.toast-body.success,
+.toast-body.info {
+  border-color: var(--ui-accent-border) !important;
+  background: var(--ui-accent-soft) !important;
+  color: var(--ui-accent) !important;
+}
+
+.toast-title {
+  font-weight: 600;
+}
+
+/* modal (PDF preview container; markup is emitted by the app) */
+.modal {
   display: none;
+  position: relative;
+  z-index: var(--ui-z-modal);
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 85vh;
+  height: 85dvh;
+  overflow: hidden;
+  background-color: var(--ui-overlay);
+}
+
+.modal-header {
+  padding: 0 var(--ui-space-3);
+}
+
+.modal-content {
+  background-color: var(--ui-surface);
+  color: var(--ui-fg);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--ui-radius-lg);
+}
+
+.close {
+  color: var(--ui-fg-3);
+  align-self: flex-end;
+  font-size: 28px;
+  font-weight: bold;
+  line-height: 1;
+}
+
+.close:hover,
+.close:focus {
+  color: var(--ui-fg);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.modal-body {
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ==========================================================================
+   9. responsive
+   ========================================================================== */
+
+@media (max-width: 1024px) {
+  #chat-workspace {
+    flex-wrap: wrap;
+    height: auto;
+    overflow: visible;
+  }
+
+  #chat-area {
+    flex: 1 1 100%;
+    height: auto !important;
+    min-height: calc(var(--main-area-height) - var(--ui-space-6));
+  }
+
+  #chat-info-panel {
+    flex: 1 1 100%;
+    width: 100%;
+    max-width: 100%;
+    max-height: 50vh !important;
+    max-height: 50dvh !important;
+  }
+
+  #conv-settings-panel {
+    width: var(--ui-sidebar-w-md);
+    max-width: var(--ui-sidebar-w-md);
+  }
+}
+
+@media (max-width: 820px) {
+  #app-header {
+    padding: 0 var(--ui-page-pad-sm);
+  }
+
+  #app-tabs > .tab-nav {
+    padding: 0 var(--ui-page-pad-sm);
+  }
+
+  #chat-workspace {
+    flex-direction: column;
+    gap: var(--ui-space-2);
+    padding: var(--ui-space-2) var(--ui-page-pad-sm);
+  }
+
+  #conv-settings-panel {
+    order: -1;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    max-height: 40vh !important;
+    max-height: 40dvh !important;
+  }
+
+  /* the sidebar is stacked above the chat: collapsing it sideways makes no sense */
+  #chat-expand-button {
+    display: none !important;
+  }
+
+  #main-chat-bot {
+    min-height: 50vh;
+    min-height: 50dvh;
+  }
+
+  #chat-area {
+    min-height: 50vh;
+    min-height: 50dvh;
+  }
+
+  #help-tab,
+  #settings-tab,
+  .indices-tab,
+  #resources-tab {
+    padding: var(--ui-space-3) var(--ui-page-pad-sm) !important;
+  }
+}
+
+@media (max-width: 640px) {
+  #app-header {
+    gap: var(--ui-space-2);
+  }
+
+  .app-brand-name {
+    font-size: var(--ui-text-md);
+  }
+
+  #app-tabs > .tab-nav {
+    padding: 0 var(--ui-space-2);
+  }
+
+  #chat-workspace {
+    padding: 0;
+    gap: var(--ui-space-2);
+  }
+
+  #chat-area {
+    gap: var(--ui-space-2);
+  }
+
+  #conv-settings-panel,
+  #chat-info-panel {
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+  }
+
+  #main-chat-bot {
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+  }
+
+  /* keep the composer reachable while the message stream scrolls */
+  #chat-input {
+    position: sticky;
+    bottom: 0;
+    z-index: var(--ui-z-sticky);
+  }
+
+  .empty-state {
+    padding: var(--ui-space-4);
+  }
+
+  #quick-setting-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  #quick-setting-extras {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  #citation-dropdown {
+    min-width: 0;
+    max-width: 100%;
+  }
+}
+
+/* ==========================================================================
+   10. accessibility
+   ========================================================================== */
+
+:focus-visible {
+  outline: 2px solid var(--ui-focus);
+  outline-offset: 2px;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+summary:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--ui-focus);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--ui-focus-ring);
+}
+
+/* do not remove the outline of a control that is focused programmatically */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .message.bot,
+  #html-info-panel details.evidence {
+    animation: none !important;
+  }
+}
+
+/* ==========================================================================
+   11. Python-facing utility classes
+   ========================================================================== */
+
+/* for setting transparent background for elements */
+.no-background {
+  background-color: transparent;
+  border: none;
+}
+
+button.no-background {
+  background-color: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+/* for setting bold text for elements */
+.bold-text {
+  font-weight: 600;
+}
+
+/* for setting highlighted text for elements */
+.body-text-color {
+  color: var(--body-text-color, var(--ui-fg));
+}
+
+/* for setting right-aligned buttons */
+.right-button {
+  min-width: 200px !important;
+  width: fit-content;
+  padding-left: var(--ui-space-5);
+  padding-right: var(--ui-space-5);
+  margin: 0 0 0 auto;
+}
+
+/* for setting height limit for buttons */
+.cap-button-height {
+  max-height: 42px;
+}
+
+/* Hide sort buttons at gr.DataFrame */
+.sort-button {
+  display: none !important;
+}
+
+/* Show sort button only in File list */
+#file_list_view .sort-button {
+  display: block !important;
 }
 
 .scrollable {
@@ -303,66 +1562,30 @@ span.icon {
   overflow: unset !important;
 }
 
-pdfjs-viewer-element {
-  height: 100dvh;
-}
-
-/* Modal styles */
-
-.modal {
-  display: none;
-  position: relative;
-  z-index: 2;
-  left: 0;
-  top: 0;
-  width: 100%;
-  height: 85dvh;
-  overflow: hidden;
-  background-color: rgba(0, 0, 0, 0.4);
-}
-
-.modal-header {
-  padding: 0px 10px
-}
-
-.modal-content {
-  background-color: #fefefe;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-}
-
-.close {
-  color: #aaa;
-  align-self: flex-end;
-  font-size: 28px;
-  font-weight: bold;
-}
-
-.close:hover,
-.close:focus {
-  color: black;
-  text-decoration: none;
+/* collapsible sections created by the app */
+.clpse {
+  background-color: var(--ui-surface-2);
+  color: var(--ui-fg);
+  font-weight: 600;
+  font-size: var(--ui-text-sm);
   cursor: pointer;
+  padding: var(--ui-space-1) var(--ui-space-2);
+  width: 100%;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-sm);
+  text-align: left;
+  outline: none;
 }
 
-.modal-body {
-  flex: 1;
-  overflow: hidden;
+.clpse:hover {
+  background-color: var(--ui-hover);
 }
 
-/* Switch checkbox styles */
-
-/* #is-public-checkbox {
-  position: relative;
-  top: 4px;
-} */
-
-#suggest-chat-checkbox {
-  position: relative;
-  top: 4px;
+.clpse-active {
+  background-color: var(--ui-active);
 }
 
+/* switch (built by main.js around the app's checkboxes) */
 .switch input {
   position: absolute;
   opacity: 0;
@@ -373,43 +1596,37 @@ pdfjs-viewer-element {
   /* 1 */
   height: 1em;
   width: 2em;
-  background: #8f8f8f;
+  background: var(--ui-border-strong);
   border-radius: 1em;
   position: relative;
   top: 2px;
-  margin-right: 1em;
+  margin-right: var(--ui-space-3);
+  transition: background var(--ui-dur-1) var(--ui-ease);
 }
 
 .switch div {
   height: 1em;
   width: 1em;
   border-radius: 1em;
-  background: #FFF;
-  box-shadow: 0 0.1em 0.3em rgba(0, 0, 0, 0.3);
+  background: var(--ui-surface);
+  box-shadow: var(--ui-shadow-1);
   -webkit-transition: all 300ms;
-  -moz-transition: all 300ms;
   transition: all 300ms;
 }
 
-.switch input:checked+div {
+.switch input:checked + div {
   -webkit-transform: translate3d(100%, 0, 0);
-  -moz-transform: translate3d(100%, 0, 0);
   transform: translate3d(100%, 0, 0);
-  background: #12df9a;
+  background: var(--ui-success);
 }
 
 .switch:has(> input:checked) {
-  background: #0c895f;
+  background: var(--ui-success);
 }
 
-/* Bot animation */
-
+/* bot answer / evidence entrance */
 .message.bot {
-  animation: fadein 1.0s ease-in-out forwards;
-}
-
-details.evidence {
-  animation: fadein 0.3s ease-in-out forwards;
+  animation: fadein 1s var(--ui-ease) forwards;
 }
 
 @keyframes fadein {
@@ -418,68 +1635,11 @@ details.evidence {
   }
 
   100% {
-    opacity: 100%;
+    opacity: 1;
   }
 }
 
-.message a.citation {
-  color: #10b981;
-  text-decoration: none;
-}
-
-/* pop-up for file tag in chat input*/
-.tribute-container ul {
-  background-color: var(--background-fill-primary) !important;
-  color: var(--body-text-color) !important;
-  font-family: var(--font);
-  font-size: var(--text-md);
-}
-
-.tribute-container li.highlight {
-  background-color: var(--border-color-primary) !important;
-}
-
-/* a fix for flickering background in Gradio DataFrame */
-tbody:not(.row_odd) {
-  background: var(--table-even-background-fill);
-}
-
-#chat-suggestion {
-  max-height: 350px;
-}
-
-#chat-suggestion table {
-  overflow: hidden;
-}
-
-#chat-suggestion table thead {
-  display: none;
-}
-
-#paper-suggestion table {
-  overflow: hidden;
-}
-
-svg.markmap {
-  width: 100%;
-  height: 100%;
-  font-family: Quicksand, sans-serif;
-  font-size: 15px;
-}
-
-div.markmap {
-  height: 400px;
-}
-
-#google-login {
-  max-width: 450px;
-}
-
-#user-api-key-wrapper {
-  max-width: 450px;
-}
-
-#login-row {
-  display: grid;
-  place-items: center;
+/* generic helper used by a few pages */
+span.icon {
+  color: var(--ui-fg-3);
 }

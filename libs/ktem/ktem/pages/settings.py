@@ -247,22 +247,23 @@ class SettingsPage(BasePage):
 
     def user_tab(self):
         # user management
-        self.current_name = gr.Markdown("Current user: ___")
+        with gr.Column(elem_classes=["panel-card"]):
+            self.current_name = gr.Markdown("Current user: ___")
 
-        if KH_SSO_ENABLED:
-            import gradiologin as grlogin
+            if KH_SSO_ENABLED:
+                import gradiologin as grlogin
 
-            self.sso_signout = grlogin.LogoutButton("Logout")
-        else:
-            self.signout = gr.Button("Logout")
+                self.sso_signout = grlogin.LogoutButton("Logout")
+            else:
+                self.signout = gr.Button("Logout")
 
-            self.password_change = gr.Textbox(
-                label="New password", interactive=True, type="password"
-            )
-            self.password_change_confirm = gr.Textbox(
-                label="Confirm password", interactive=True, type="password"
-            )
-            self.password_change_btn = gr.Button("Change password", interactive=True)
+                self.password_change = gr.Textbox(
+                    label="New password", interactive=True, type="password"
+                )
+                self.password_change_confirm = gr.Textbox(
+                    label="Confirm password", interactive=True, type="password"
+                )
+                self.password_change_btn = gr.Button("Change password", interactive=True)
 
     def change_password(self, user_id, password, password_confirm):
         from ktem.pages.resources.user import validate_password
@@ -290,13 +291,14 @@ class SettingsPage(BasePage):
 
     def app_tab(self):
         with gr.Tab("General", visible=self._render_app_tab):
-            for n, si in self._default_settings.application.settings.items():
-                obj = render_setting_item(si, si.value)
-                self._components[f"application.{n}"] = obj
-                if si.special_type == "llm":
-                    self._llms.append(obj)
-                if si.special_type == "embedding":
-                    self._embeddings.append(obj)
+            with gr.Column(elem_classes=["panel-card"]):
+                for n, si in self._default_settings.application.settings.items():
+                    obj = render_setting_item(si, si.value)
+                    self._components[f"application.{n}"] = obj
+                    if si.special_type == "llm":
+                        self._llms.append(obj)
+                    if si.special_type == "embedding":
+                        self._embeddings.append(obj)
 
     def index_tab(self):
         # TODO: double check if we need general
@@ -307,65 +309,70 @@ class SettingsPage(BasePage):
 
         id2name = {k: v.name for k, v in self._app.index_manager.info().items()}
         with gr.Tab("Retrieval settings", visible=self._render_index_tab):
-            for pn, sig in self._default_settings.index.options.items():
-                name = id2name.get(pn, f"<id {pn}>")
-                with gr.Tab(name):
-                    for n, si in sig.settings.items():
-                        obj = render_setting_item(si, si.value)
-                        self._components[f"index.options.{pn}.{n}"] = obj
-                        if si.special_type == "llm":
-                            self._llms.append(obj)
-                        if si.special_type == "embedding":
-                            self._embeddings.append(obj)
+            with gr.Column(elem_classes=["panel-card"]):
+                for pn, sig in self._default_settings.index.options.items():
+                    name = id2name.get(pn, f"<id {pn}>")
+                    with gr.Tab(name):
+                        for n, si in sig.settings.items():
+                            obj = render_setting_item(si, si.value)
+                            self._components[f"index.options.{pn}.{n}"] = obj
+                            if si.special_type == "llm":
+                                self._llms.append(obj)
+                            if si.special_type == "embedding":
+                                self._embeddings.append(obj)
 
     def reasoning_tab(self):
         with gr.Tab("Reasoning settings", visible=self._render_reasoning_tab):
-            with gr.Group():
-                for n, si in self._default_settings.reasoning.settings.items():
-                    if n == "use":
-                        continue
-                    obj = render_setting_item(si, si.value)
-                    self._components[f"reasoning.{n}"] = obj
-                    if si.special_type == "llm":
-                        self._llms.append(obj)
-                    if si.special_type == "embedding":
-                        self._embeddings.append(obj)
-
-            gr.Markdown("### Reasoning-specific settings")
-            self._components["reasoning.use"] = render_setting_item(
-                self._default_settings.reasoning.settings["use"],
-                self._default_settings.reasoning.settings["use"].value,
-            )
-
-            for idx, (pn, sig) in enumerate(
-                self._default_settings.reasoning.options.items()
-            ):
-                with gr.Group(
-                    visible=idx == 0,
-                    elem_id=pn,
-                ) as self._reasoning_mode[pn]:
-                    reasoning = reasonings.get(pn, None)
-                    if reasoning is None:
-                        gr.Markdown("**Name**: Description")
-                    else:
-                        info = reasoning.get_info()
-                        gr.Markdown(f"**{info['name']}**: {info['description']}")
-                    for n, si in sig.settings.items():
+            with gr.Column(elem_classes=["panel-card"]):
+                with gr.Group():
+                    for n, si in self._default_settings.reasoning.settings.items():
+                        if n == "use":
+                            continue
                         obj = render_setting_item(si, si.value)
-                        self._components[f"reasoning.options.{pn}.{n}"] = obj
-                        if n == "tools" and si.component == "checkboxgroup":
-                            self._reasoning_tool_components.append(obj)
-                            self._reasoning_tool_base_choices.append(
-                                [
-                                    choice
-                                    for choice in si.choices
-                                    if not choice.startswith(MCP_TOOL_PREFIX)
-                                ]
-                            )
+                        self._components[f"reasoning.{n}"] = obj
                         if si.special_type == "llm":
                             self._llms.append(obj)
                         if si.special_type == "embedding":
                             self._embeddings.append(obj)
+
+                gr.Markdown(
+                    "### Reasoning-specific settings",
+                    elem_classes=["section-title"],
+                )
+                self._components["reasoning.use"] = render_setting_item(
+                    self._default_settings.reasoning.settings["use"],
+                    self._default_settings.reasoning.settings["use"].value,
+                )
+
+                for idx, (pn, sig) in enumerate(
+                    self._default_settings.reasoning.options.items()
+                ):
+                    with gr.Group(
+                        visible=idx == 0,
+                        elem_id=pn,
+                    ) as self._reasoning_mode[pn]:
+                        reasoning = reasonings.get(pn, None)
+                        if reasoning is None:
+                            gr.Markdown("**Name**: Description")
+                        else:
+                            info = reasoning.get_info()
+                            gr.Markdown(f"**{info['name']}**: {info['description']}")
+                        for n, si in sig.settings.items():
+                            obj = render_setting_item(si, si.value)
+                            self._components[f"reasoning.options.{pn}.{n}"] = obj
+                            if n == "tools" and si.component == "checkboxgroup":
+                                self._reasoning_tool_components.append(obj)
+                                self._reasoning_tool_base_choices.append(
+                                    [
+                                        choice
+                                        for choice in si.choices
+                                        if not choice.startswith(MCP_TOOL_PREFIX)
+                                    ]
+                                )
+                            if si.special_type == "llm":
+                                self._llms.append(obj)
+                            if si.special_type == "embedding":
+                                self._embeddings.append(obj)
 
     def change_reasoning_mode(self, value):
         output = []

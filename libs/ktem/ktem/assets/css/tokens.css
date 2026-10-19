@@ -1,0 +1,163 @@
+/* Design tokens of the citeask UI.
+ *
+ * Every colour, size and timing value used by main.css lives here, so main.css
+ * itself never hard-codes a colour. Light values are declared on :root; dark
+ * values on `html.dark`, which is one element above the `.dark` class Gradio puts
+ * on <body> — so these rules win even while Gradio applies its own dark theme.
+ * The `dark` class is set on <html> by theme_init.js before first paint (see
+ * assets/js/theme_init.js) and kept in sync with <body> by main.js.
+ *
+ * Palette: neutral = slate, accent = blue (#F8FAFC…#0A0F1E), the same hues the
+ * Gradio theme (assets/theme.py) is built from, so the two layers agree.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* ---- surfaces ---------------------------------------------------------- */
+  --ui-bg: #F8FAFC;
+  --ui-surface: #FFFFFF;
+  --ui-surface-2: #F1F5F9;
+  --ui-hover: #F1F5F9;
+  --ui-active: #E2E8F0;
+  --ui-overlay: rgba(15, 23, 42, 0.45);
+
+  /* ---- text -------------------------------------------------------------- */
+  --ui-fg: #1E293B;
+  --ui-fg-2: #475569;
+  --ui-fg-3: #64748B;
+  --ui-fg-inverse: #FFFFFF;
+
+  /* ---- borders ----------------------------------------------------------- */
+  --ui-border: #E2E8F0;
+  --ui-border-strong: #CBD5E1;
+
+  /* ---- accent ------------------------------------------------------------ */
+  --ui-accent: #2563EB;
+  --ui-accent-hover: #1D4ED8;
+  --ui-accent-soft: #EFF6FF;
+  --ui-accent-border: #BFDBFE;
+  --ui-on-accent: #FFFFFF;
+
+  /* ---- semantic ---------------------------------------------------------- */
+  --ui-danger: #DC2626;
+  --ui-danger-soft: #FEF2F2;
+  --ui-success: #059669;
+  --ui-mark-bg: #FEF3C7;
+  --ui-mark-fg: #92400E;
+
+  /* ---- focus & elevation ------------------------------------------------- */
+  --ui-focus: #2563EB;
+  --ui-focus-ring: rgba(37, 99, 235, 0.35);
+  --ui-shadow-1: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --ui-shadow-2: 0 4px 12px rgba(15, 23, 42, 0.08);
+
+  /* ---- spacing (4px scale) ---------------------------------------------- */
+  --ui-space-1: 4px;
+  --ui-space-2: 8px;
+  --ui-space-3: 12px;
+  --ui-space-4: 16px;
+  --ui-space-5: 20px;
+  --ui-space-6: 24px;
+  --ui-space-7: 32px;
+  --ui-space-8: 40px;
+  --ui-space-9: 48px;
+
+  /* ---- radii ------------------------------------------------------------- */
+  --ui-radius-sm: 6px;
+  --ui-radius-md: 8px;
+  --ui-radius-lg: 12px;
+  --ui-radius-pill: 999px;
+
+  /* ---- layout sizes ------------------------------------------------------ */
+  --ui-header-h: 56px;
+  --ui-nav-h: 44px;
+  --ui-sidebar-w: 280px;
+  --ui-sidebar-w-md: 240px;
+  --ui-info-w: 340px;
+  --ui-info-w-md: 300px;
+  --ui-content-max: 1680px;
+  --ui-reading-max: 980px;
+  --ui-page-pad: 24px;
+  --ui-page-pad-sm: 16px;
+
+  /* ---- typography -------------------------------------------------------- */
+  --ui-font-sans: system-ui, -apple-system, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei",
+    "Noto Sans CJK SC", "Source Han Sans SC", sans-serif;
+  --ui-font-mono: ui-monospace, SFMono-Regular, "Cascadia Code", Consolas,
+    "Liberation Mono", monospace;
+  --ui-text-xs: 12px;
+  --ui-text-sm: 13px;
+  --ui-text-md: 14px;
+  --ui-text-lg: 15px;
+  --ui-text-xl: 18px;
+  --ui-text-2xl: 24px;
+  --ui-leading-tight: 1.35;
+  --ui-leading-normal: 1.5;
+  --ui-leading-prose: 1.65;
+
+  /* ---- motion & layers --------------------------------------------------- */
+  --ui-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ui-dur-1: 120ms;
+  --ui-dur-2: 180ms;
+  --ui-z-sticky: 10;
+  --ui-z-popover: 20;
+  --ui-z-modal: 100;
+
+  /* ---- main area height --------------------------------------------------
+   * Used by the tab panels and the chat workspace. Fallback for browsers
+   * without the dynamic viewport unit; the @supports block below prefers it so
+   * the layout does not jump when a mobile browser hides its address bar. */
+  --main-area-height: calc(100vh - 100px);
+}
+
+@supports (height: 100dvh) {
+  :root {
+    --main-area-height: calc(100dvh - var(--ui-header-h) - var(--ui-nav-h));
+  }
+}
+
+/* Dark theme. Declared on <html> (theme_init.js / main.js), with <body> kept in
+ * sync so Gradio's own `.dark` variables apply as well. */
+html.dark {
+  color-scheme: dark;
+
+  /* ---- surfaces ---------------------------------------------------------- */
+  --ui-bg: #0A0F1E;
+  --ui-surface: #0F172A;
+  --ui-surface-2: #1E293B;
+  --ui-hover: #1E293B;
+  --ui-active: #334155;
+  --ui-overlay: rgba(0, 0, 0, 0.60);
+
+  /* ---- text -------------------------------------------------------------- */
+  --ui-fg: #F1F5F9;
+  --ui-fg-2: #CBD5E1;
+  --ui-fg-3: #94A3B8;
+  --ui-fg-inverse: #0A0F1E;
+
+  /* ---- borders ----------------------------------------------------------- */
+  --ui-border: #1E293B;
+  --ui-border-strong: #334155;
+
+  /* ---- accent ------------------------------------------------------------ */
+  --ui-accent: #60A5FA;
+  --ui-accent-hover: #93C5FD;
+  --ui-accent-soft: rgba(96, 165, 250, 0.12);
+  --ui-accent-border: rgba(96, 165, 250, 0.32);
+  --ui-on-accent: #0A0F1E;
+
+  /* ---- semantic ---------------------------------------------------------- */
+  --ui-danger: #F87171;
+  --ui-danger-soft: rgba(248, 113, 113, 0.12);
+  --ui-success: #34D399;
+  --ui-mark-bg: rgba(250, 204, 21, 0.20);
+  --ui-mark-fg: #FDE68A;
+
+  /* ---- focus & elevation ------------------------------------------------- */
+  --ui-focus: #60A5FA;
+  --ui-focus-ring: rgba(96, 165, 250, 0.40);
+  --ui-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.50);
+  --ui-shadow-2: 0 4px 14px rgba(0, 0, 0, 0.55);
+}

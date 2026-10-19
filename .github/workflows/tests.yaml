@@ -55,3 +55,41 @@ jobs:
             --source=libs/ktem/ktem/utils,libs/kotaemon/kotaemon/loaders,libs/ktem/ktem/index/file \
             -m pytest libs/ktem/ktem_tests -q --ignore=libs/ktem/ktem_tests/test_qa.py
           .venv/bin/python -m coverage report --include="*/i18n.py,*/selector.py,*/ocr_pdf_loader.py,*/repair.py"
+
+  # The React UI is committed as a build (web/dist) so the Python job - and any
+  # checkout - runs without Node. This job proves the committed artefact can be
+  # rebuilt from the sources in web/ (MODIFICATIONS §5.25).
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # node --test runs the TypeScript test files through native type
+          # stripping, which needs Node 22.6+; the project is developed on 24.
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Build artefact exists
+        run: test -f dist/index.html && ls -lh dist dist/assets

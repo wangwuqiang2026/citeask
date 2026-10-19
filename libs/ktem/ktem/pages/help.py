@@ -83,14 +83,14 @@ class HelpPage:
                 f"{self.remote_content_url}/v{self.app_version}/docs/about.md"
             )
         if about_md:
-            with gr.Accordion("About"):
+            with gr.Accordion("About", elem_classes=["panel-card"]):
                 if self.app_version:
                     version_label = lookup("Version:", KH_UI_LANGUAGE)
                     about_md = f"{version_label} {self.app_version}\n\n{about_md}"
                 gr.Markdown(about_md)
 
         if KH_DEMO_MODE:
-            with gr.Accordion("Create Your Own Space"):
+            with gr.Accordion("Create Your Own Space", elem_classes=["panel-card"]):
                 gr.Markdown(
                     "This is a demo with limited functionality. "
                     "Use **Create space** button to install the app "
@@ -111,7 +111,11 @@ class HelpPage:
                 f"{self.remote_content_url}/v{self.app_version}/docs/usage.md"
             )
         if user_guide_md:
-            with gr.Accordion("User Guide", open=not KH_DEMO_MODE):
+            with gr.Accordion(
+                "User Guide",
+                open=not KH_DEMO_MODE,
+                elem_classes=["panel-card"],
+            ):
                 gr.Markdown(user_guide_md)
 
         if self.app_version:
@@ -139,5 +143,8 @@ class HelpPage:
 
             if changelogs:
                 changelog_label = lookup("Changelogs", KH_UI_LANGUAGE)
-                with gr.Accordion(f"{changelog_label} (v{self.app_version})"):
+                with gr.Accordion(
+                    f"{changelog_label} (v{self.app_version})",
+                    elem_classes=["panel-card"],
+                ):
                     gr.Markdown(changelogs)

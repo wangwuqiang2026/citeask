@@ -38,7 +38,9 @@ class Document(BaseDocument):
 
     content: Any = None
     source: Optional[str] = None
-    channel: Optional[Literal["chat", "info", "index", "debug", "plot"]] = None
+    channel: Optional[
+        Literal["chat", "info", "index", "debug", "plot", "evidence", "mindmap"]
+    ] = None
 
     def __init__(self, content: Optional[Any] = None, *args, **kwargs):
         if content is None:

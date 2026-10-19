@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>citeask</title>
+    <link rel="icon" href="/favicon.ico" />
+    <!--
+      Apply the stored / system colour scheme before the first paint. Inline and
+      synchronous on purpose: a module script would run after the stylesheet and
+      flash the wrong background (MODIFICATIONS §5.25).
+    -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem("citeask.theme");
+          var dark =
+            stored === "dark" ||
+            (stored !== "light" &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches);
+          var root = document.documentElement;
+          root.classList.toggle("dark", dark);
+          root.style.colorScheme = dark ? "dark" : "light";
+        } catch (error) {
+          /* storage disabled: the CSS follows prefers-color-scheme */
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

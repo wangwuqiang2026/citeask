@@ -56,7 +56,7 @@ if KH_WEB_SEARCH_BACKEND:
 
 REASONING_LIMITS = 2 if KH_DEMO_MODE else 10
 DEFAULT_SETTING = "(default)"
-INFO_PANEL_SCALES = {True: 8, False: 4}
+INFO_PANEL_SCALES = {True: 5, False: 3}
 DEFAULT_QUESTION = (
     "What is the summary of this document?"
     if not KH_DEMO_MODE
@@ -221,14 +221,14 @@ class ChatPage(BasePage):
         self._user_api_key = gr.Text(value="", visible=False)
 
     def on_building_ui(self):
-        with gr.Row():
+        with gr.Row(elem_id="chat-workspace"):
             self.state_chat = gr.State(STATE)
             self.state_retrieval_history = gr.State([])
             self.state_plot_history = gr.State([])
             self.state_plot_panel = gr.State(None)
             self.first_selector_choices = gr.State(None)
 
-            with gr.Column(scale=1, elem_id="conv-settings-panel") as self.conv_column:
+            with gr.Column(scale=2, elem_id="conv-settings-panel") as self.conv_column:
                 self.chat_control = ConversationControl(self._app)
 
                 for index_id, index in enumerate(self._app.index_manager.indices):
@@ -313,7 +313,7 @@ class ChatPage(BasePage):
 
                     self.hint_page = HintPage(self._app)
 
-            with gr.Column(scale=6, elem_id="chat-area"):
+            with gr.Column(scale=7, elem_id="chat-area"):
                 if KH_DEMO_MODE:
                     self.paper_list = PaperListPage(self._app)
 
@@ -332,7 +332,7 @@ class ChatPage(BasePage):
                         )
                         gr.HTML("Language")
 
-                    with gr.Row():
+                    with gr.Row(elem_id="quick-setting-row"):
                         reasoning_setting = (
                             self._app.default_settings.reasoning.settings["use"]
                         )
@@ -366,6 +366,10 @@ class ChatPage(BasePage):
                             show_label=False,
                         )
 
+                    # Citation and mindmap stay in normal document flow instead of
+                    # being absolutely positioned over the dropdowns (which overlapped
+                    # them on narrow screens); their elem_ids are kept for styling.
+                    with gr.Row(elem_id="quick-setting-extras"):
                         self.citation = gr.Dropdown(
                             choices=citation_setting.choices,
                             value=citation_setting.value,

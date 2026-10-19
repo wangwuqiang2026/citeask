@@ -1,6 +1,6 @@
 import logging
-import os
 from copy import deepcopy
+from pathlib import Path
 
 import gradio as gr
 from ktem.app import BasePage
@@ -10,6 +10,8 @@ from sqlmodel import Session, or_, select
 import flowsettings
 
 from ...utils.conversation import sync_retrieval_n_message
+from ...utils.i18n import tr
+from ...utils.render import Render
 from .chat_suggestion import ChatSuggestion
 from .common import STATE
 
@@ -17,9 +19,9 @@ logger = logging.getLogger(__name__)
 
 KH_DEMO_MODE = getattr(flowsettings, "KH_DEMO_MODE", False)
 KH_SSO_ENABLED = getattr(flowsettings, "KH_SSO_ENABLED", False)
-ASSETS_DIR = "assets/icons"
-if not os.path.isdir(ASSETS_DIR):
-    ASSETS_DIR = "libs/ktem/ktem/assets/icons"
+#: Resolved from this package so the icons are found whatever the process working
+#: directory is (the previous relative lookup only worked when started from the repo).
+ASSETS_DIR = str(Path(__file__).resolve().parents[2] / "assets" / "icons")
 
 
 logout_js = """
@@ -52,21 +54,19 @@ class ConversationControl(BasePage):
     def on_building_ui(self):
         with gr.Row():
             title_text = "Conversations" if not KH_DEMO_MODE else "Kotaemon Papers"
-            gr.Markdown("## {}".format(title_text))
-            self.btn_toggle_dark_mode = gr.Button(
-                value="",
-                icon=f"{ASSETS_DIR}/dark_mode.svg",
-                scale=1,
-                size="sm",
-                elem_classes=["no-background", "body-text-color"],
-                elem_id="toggle-dark-button",
+            gr.Markdown(
+                "## {}".format(title_text),
+                elem_id="sidebar-title",
+                elem_classes=["section-title"],
             )
+            # The theme switch lives in the top bar of the application (main.py), so
+            # that there is exactly one toggle in the whole UI.
             self.btn_chat_expand = gr.Button(
                 value="",
                 icon=f"{ASSETS_DIR}/expand.svg",
                 scale=1,
                 size="sm",
-                elem_classes=["no-background", "body-text-color"],
+                elem_classes=["no-background", "body-text-color", "icon-button"],
                 elem_id="chat-expand-button",
             )
             self.btn_info_expand = gr.Button(
@@ -75,17 +75,8 @@ class ConversationControl(BasePage):
                 min_width=2,
                 scale=1,
                 size="sm",
-                elem_classes=["no-background", "body-text-color"],
+                elem_classes=["no-background", "body-text-color", "icon-button"],
                 elem_id="info-expand-button",
-            )
-
-            self.btn_toggle_dark_mode.click(
-                None,
-                js="""
-                () => {
-                    document.body.classList.toggle('dark');
-                }
-                """,
             )
 
         self.conversation_id = gr.State(value="")
@@ -99,7 +90,7 @@ class ConversationControl(BasePage):
             elem_id="conversation-dropdown",
         )
 
-        with gr.Row() as self._new_delete:
+        with gr.Row(elem_classes=["sidebar-card"]) as self._new_delete:
             self.cb_suggest_chat = gr.Checkbox(
                 value=False,
                 label="Suggest chat",
@@ -124,7 +115,8 @@ class ConversationControl(BasePage):
                     min_width=2,
                     scale=1,
                     size="sm",
-                    elem_classes=["no-background", "body-text-color"],
+                    elem_classes=["no-background", "body-text-color", "icon-button"],
+                    elem_id="rename-conv-button",
                 )
                 self.btn_del = gr.Button(
                     value="",
@@ -132,15 +124,16 @@ class ConversationControl(BasePage):
                     min_width=2,
                     scale=1,
                     size="sm",
-                    elem_classes=["no-background", "body-text-color"],
+                    elem_classes=["no-background", "body-text-color", "icon-button"],
+                    elem_id="delete-conv-button",
                 )
                 self.btn_new = gr.Button(
-                    value="",
+                    value="New chat",
                     icon=f"{ASSETS_DIR}/new.svg",
-                    min_width=2,
+                    min_width=100,
                     scale=1,
                     size="sm",
-                    elem_classes=["no-background", "body-text-color"],
+                    elem_classes=["no-background", "body-text-color", "icon-button"],
                     elem_id="new-conv-button",
                 )
             else:
@@ -332,7 +325,10 @@ class ConversationControl(BasePage):
                 info_panel = (
                     retrieval_history[-1]
                     if retrieval_history
-                    else "<h5><b>No evidence found.</b></h5>"
+                    else Render.empty_state(
+                        tr("No evidence yet"),
+                        tr("Evidence will appear here after you ask a question."),
+                    )
                 )
                 plot_data = plot_history[-1] if plot_history else None
                 state = result.data_source.get("state", STATE)

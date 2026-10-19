@@ -40,6 +40,14 @@ tramp
 # cask packages
 .cask/
 dist/
+# ...except the built web UI, which is committed so a checkout runs without Node
+!libs/ktem/ktem/web/dist/
+!libs/ktem/ktem/web/dist/**
+!web/dist/
+!web/dist/**
+# frontend toolchain
+web/node_modules/
+web/ktem_app_data/
 
 # Flycheck
 flycheck_*.el
@@ -488,3 +496,8 @@ flow_tmp/
 # runtime caches that land in the working directory
 theflow_HP/
 fasttext-langdetect/
+
+# the Python template above ignores every `lib/` directory; the SPA keeps its
+# shared modules in web/src/lib, so re-include it here (last match wins)
+!web/src/lib/
+!web/src/lib/**

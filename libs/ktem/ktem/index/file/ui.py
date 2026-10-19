@@ -286,7 +286,7 @@ class FileIndexPage(BasePage):
             elem_id="file_list_view",
         )
 
-        with gr.Row():
+        with gr.Row(elem_id="file-toolbar", elem_classes=["toolbar"]):
 
             self.chat_button = gr.Button(
                 "Go to Chat",
@@ -307,13 +307,13 @@ class FileIndexPage(BasePage):
                 visible=False,
             )
 
-        with gr.Row() as self.selection_info:
+        with gr.Row(elem_id="file-selection") as self.selection_info:
             self.selected_file_id = gr.State(value=None)
             with gr.Column(scale=2):
                 self.selected_panel = gr.Markdown(self.selected_panel_false)
 
         self.chunk_header = gr.Markdown(visible=False)
-        with gr.Row() as self.chunk_toolbar:
+        with gr.Row(elem_classes=["toolbar"]) as self.chunk_toolbar:
             self.chunk_type_filter = gr.Dropdown(
                 choices=["all", "text", "table", "image", "thumbnail"],
                 value="all",
@@ -322,7 +322,7 @@ class FileIndexPage(BasePage):
                 scale=1,
                 visible=False,
             )
-        self.chunks = gr.HTML(visible=False)
+        self.chunks = gr.HTML(visible=False, elem_id="chunk-panel")
 
         with gr.Accordion("Advance options", open=False):
             with gr.Row():
@@ -395,7 +395,7 @@ class FileIndexPage(BasePage):
     def on_building_ui(self):
         """Build the UI of the app"""
         with gr.Row():
-            with gr.Column(scale=1):
+            with gr.Column(scale=1, elem_id="index-upload"):
                 with gr.Column() as self.upload:
                     with gr.Tab("Upload Files"):
                         self.files = File(
@@ -427,7 +427,11 @@ class FileIndexPage(BasePage):
                     )
 
             with gr.Column(scale=4):
-                with gr.Column(visible=False) as self.upload_progress_panel:
+                with gr.Column(
+                    visible=False,
+                    elem_id="upload-progress",
+                    elem_classes=["panel-card"],
+                ) as self.upload_progress_panel:
                     gr.Markdown("## Upload Progress")
                     with gr.Row():
                         self.upload_result = gr.Textbox(

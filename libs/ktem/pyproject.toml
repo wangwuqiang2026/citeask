@@ -7,6 +7,11 @@ include-package-data = true
 packages.find.exclude = ["ktem_tests*", "env*"]
 packages.find.include = ["ktem*"]
 
+# The built React application is committed and shipped inside the wheel, so an
+# installed package serves the web UI without Node (MODIFICATIONS §5.25).
+[tool.setuptools.package-data]
+ktem = ["web/dist/**/*"]
+
 [tool.setuptools-git-versioning]
 enabled = true
 dev_template = "{tag}"

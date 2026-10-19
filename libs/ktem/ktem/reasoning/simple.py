@@ -15,7 +15,7 @@ from ktem.reasoning.prompt_optimization import (
     RewriteQuestionPipeline,
 )
 from ktem.utils.i18n import tr
-from ktem.utils.render import Render
+from ktem.utils.render import Render, relevance_score_of, reranking_score_of
 from ktem.utils.trace import TraceRecorder
 from ktem.utils.visualize_cited import CreateCitationVizPipeline
 from plotly.io import to_json
@@ -327,6 +327,61 @@ class FullQAPipeline(BaseReasoning):
 
         return plot_content
 
+    def structured_evidence(self, answer, docs) -> list[dict]:
+        """The evidence as JSON-friendly records for the web UI (MODIFICATIONS §5.25).
+
+        The classic panel renders HTML; the web UI needs data. Both are produced
+        from the same ``docs`` and the same score helpers, so they cannot disagree.
+        """
+        try:
+            spans = self.answering_pipeline.match_evidence_with_context(answer, docs)
+        except Exception as exc:  # noqa: BLE001 - evidence rendering is best effort
+            logger.warning("could not match evidence spans: %s", exc)
+            spans = {}
+
+        items: list[dict] = []
+        for doc in docs:
+            metadata = getattr(doc, "metadata", None) or {}
+            raw_spans = spans.get(doc.doc_id, []) if isinstance(spans, dict) else []
+            clean_spans = [
+                {
+                    "start": int(span.get("start", 0)),
+                    "end": int(span.get("end", 0)),
+                    "idx": span.get("idx"),
+                }
+                for span in raw_spans
+                if isinstance(span, dict)
+            ]
+            try:
+                score = float(relevance_score_of(doc))
+            except Exception:  # noqa: BLE001
+                score = 0.0
+            try:
+                llm_score = round(float(metadata.get("llm_trulens_score") or 0.0), 2)
+            except (TypeError, ValueError):
+                llm_score = 0.0
+            items.append(
+                {
+                    "id": doc.doc_id,
+                    "file_id": metadata.get("file_id"),
+                    "file_name": metadata.get("file_name", "<evidence>"),
+                    "page": metadata.get("page_label"),
+                    "type": metadata.get("type", "text"),
+                    "score": score,
+                    "vector_score": round(float(getattr(doc, "score", 0.0) or 0.0), 4),
+                    "rerank_score": reranking_score_of(doc),
+                    "llm_score": llm_score,
+                    "text": (doc.text or "")[:4000],
+                    "file_path": metadata.get("file_path", ""),
+                    "cited": bool(clean_spans),
+                    "spans": clean_spans,
+                }
+            )
+
+        # cited chunks first, then by the score the panel shows (MODIFICATIONS §5.23)
+        items.sort(key=lambda item: (not item["cited"], -item["score"]))
+        return items
+
     def show_citations_and_addons(self, answer, docs, question):
         # show the evidence
         with_citation, without_citation = self.answering_pipeline.prepare_citations(
@@ -335,8 +390,21 @@ class FullQAPipeline(BaseReasoning):
         mindmap_output = self.prepare_mindmap(answer)
         citation_plot_output = self.prepare_citation_viz(answer, question, docs)
 
+        # Structured channels for the web UI (MODIFICATIONS §5.25). The classic
+        # page ignores unknown channels, so both UIs read the same run.
+        yield Document(channel="evidence", content=self.structured_evidence(answer, docs))
+        mindmap_source = (getattr(answer, "metadata", None) or {}).get("mindmap")
+        if mindmap_source is not None and getattr(mindmap_source, "text", ""):
+            yield Document(channel="mindmap", content=mindmap_source.text)
+
         if not with_citation and not without_citation:
-            yield Document(channel="info", content="<h5><b>No evidence found.</b></h5>")
+            yield Document(
+                channel="info",
+                content=Render.empty_state(
+                    tr("No evidence yet"),
+                    tr("Evidence will appear here after you ask a question."),
+                ),
+            )
         else:
             # clear the Info panel
             max_llm_rerank_score = max(
@@ -407,6 +475,9 @@ class FullQAPipeline(BaseReasoning):
         refused = abstain_events(message, docs)
         if refused:
             print("Refusing to answer: the evidence is too weak")
+            # still show what was retrieved: the web UI needs the chunks and their
+            # scores to explain the refusal (MODIFICATIONS §5.25)
+            yield Document(channel="evidence", content=self.structured_evidence(None, docs))
             yield from refused
             self._trace_query(
                 trace,
@@ -731,6 +802,7 @@ class FullDecomposeQAPipeline(FullQAPipeline):
         refused = abstain_events(message, docs)
         if refused:
             print("Refusing to answer the main question: evidence too weak")
+            yield Document(channel="evidence", content=self.structured_evidence(None, docs))
             yield from refused
             return Document(text=refused[-1].content, channel="chat")
 
@@ -749,8 +821,15 @@ class FullDecomposeQAPipeline(FullQAPipeline):
         with_citation, without_citation = self.answering_pipeline.prepare_citations(
             answer, docs
         )
+        yield Document(channel="evidence", content=self.structured_evidence(answer, docs))
         if not with_citation and not without_citation:
-            yield Document(channel="info", content="<h5><b>No evidence found.</b></h5>")
+            yield Document(
+                channel="info",
+                content=Render.empty_state(
+                    tr("No evidence yet"),
+                    tr("Evidence will appear here after you ask a question."),
+                ),
+            )
         else:
             yield Document(channel="info", content=None)
             yield from with_citation

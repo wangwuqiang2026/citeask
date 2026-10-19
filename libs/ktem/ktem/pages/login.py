@@ -4,6 +4,7 @@ import gradio as gr
 from ktem.app import BasePage
 from ktem.db.models import User, engine
 from ktem.pages.resources.user import create_user
+from ktem.utils.i18n import tr
 from sqlmodel import Session, select
 
 fetch_creds = """
@@ -32,10 +33,18 @@ class LoginPage(BasePage):
         self.on_building_ui()
 
     def on_building_ui(self):
-        gr.Markdown(f"# Welcome to {self._app.app_name}!")
-        self.usn = gr.Textbox(label="Username", visible=False)
-        self.pwd = gr.Textbox(label="Password", type="password", visible=False)
-        self.btn_login = gr.Button("Login", visible=False)
+        with gr.Column(elem_id="login-card"):
+            with gr.Column(elem_id="login-brand"):
+                # The product name is interpolated into the localized template, so
+                # the heading is translated as one unit instead of being assembled
+                # from English fragments.
+                gr.Markdown(tr("# Welcome to {}!").format(self._app.app_name))
+            gr.Markdown(tr("Sign in to continue"), elem_id="login-subtitle")
+            # Visible from the first render: the form used to start hidden and be
+            # flipped by an async event, so signed-out users saw an empty page.
+            self.usn = gr.Textbox(label="Username", visible=True)
+            self.pwd = gr.Textbox(label="Password", type="password", visible=True)
+            self.btn_login = gr.Button("Login", visible=True)
 
     def on_register_events(self):
         onSignIn = gr.on(

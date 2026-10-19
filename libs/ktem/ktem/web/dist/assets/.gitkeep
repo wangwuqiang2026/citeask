@@ -1,0 +1,1 @@
+Runtime builds write Vite chunks into this directory; it is committed so a checkout serves without Node.

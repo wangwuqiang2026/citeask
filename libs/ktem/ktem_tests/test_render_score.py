@@ -20,10 +20,10 @@ from kotaemon.base import RetrievedDocument
 
 
 def panel_doc(score=0.44, **metadata):
-    base = {"file_id": "grades", "file_name": "24级计科1班学年综测汇总表.xlsx"}
+    base = {"file_id": "grades", "file_name": "示例班级学年综测汇总表.xlsx"}
     base.update(metadata)
     return RetrievedDocument(
-        text="24405010135 王务强 75.45 84.27", metadata=base, score=score
+        text="24405010135 张同学 75.45 84.27", metadata=base, score=score
     )
 
 

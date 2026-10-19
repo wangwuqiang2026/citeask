@@ -18,29 +18,29 @@ from ktem.index.file.pipelines import DocumentRetrievalPipeline
 from kotaemon.abstain import cell_names_entity, row_identifier_terms
 from kotaemon.base import Document, RetrievedDocument
 
-GRADE_ROW = "24405010134 赵祥 62.5 71.43 66.965 39\n24405010135 王务强 75.45 84.27 79.86 4"
-PRACTICE_ROW = "24级计科1班 24405010135 王务强 32 0 2025上半年16学时，2025下半年8学时"
-COMPETITION_CELL = "10\n万物兴\n万妍妍\n马佳欣\n王务强\n二等奖+推荐省赛"
+GRADE_ROW = "24405010134 赵明 62.5 71.43 66.965 39\n24405010135 张同学 75.45 84.27 79.86 4"
+PRACTICE_ROW = "示例班级 24405010135 张同学 32 0 2025上半年16学时，2025下半年8学时"
+COMPETITION_CELL = "10\n万物兴\n王丽丽\n马佳欣\n张同学\n二等奖+推荐省赛"
 NOTICE_ROW = "一等奖学金:综合测评在班上前5名以内,各科成绩均为75分(含)以上"
 NOTICE_PROSE = "三等奖学金:综合测评在班上前10名以内,各门功课考试成绩总分排名居班上前15名"
-SUMMARY_HEADER = "学年：2025-2026学年 班级：24级计科1班 汇总人：万妍妍 联系方式：19164655656"
+SUMMARY_HEADER = "学年：2025-2026学年 班级：示例班级 汇总人：王丽丽 联系方式：19164655656"
 
 
 # --------------------------------------------------------------------------- #
 # filter 1: the match has to be a cell
 # --------------------------------------------------------------------------- #
 def test_a_name_that_is_a_whole_cell_is_evidence():
-    assert cell_names_entity(GRADE_ROW.splitlines()[1], "王务强") is True
-    assert cell_names_entity(PRACTICE_ROW, "王务强") is True
-    assert cell_names_entity("王务强", "王务强") is True
+    assert cell_names_entity(GRADE_ROW.splitlines()[1], "张同学") is True
+    assert cell_names_entity(PRACTICE_ROW, "张同学") is True
+    assert cell_names_entity("张同学", "张同学") is True
 
 
 def test_a_window_inside_a_short_name_cell_is_evidence():
     """A 4-character name only ever reaches the question as 3-character windows."""
-    row = "24级计科1班 24405010106 欧阳佳饴 28 4 2025上半年4学时"
+    row = "示例班级 24405010106 欧阳明月 28 4 2025上半年4学时"
 
-    assert cell_names_entity(row, "欧阳佳") is True
-    assert cell_names_entity(row, "阳佳饴") is True
+    assert cell_names_entity(row, "欧阳明") is True
+    assert cell_names_entity(row, "阳明月") is True
 
 
 def test_a_window_of_a_topic_word_is_not_a_cell():
@@ -51,23 +51,23 @@ def test_a_window_of_a_topic_word_is_not_a_cell():
 
 def test_a_sentence_or_a_long_field_is_never_a_cell():
     assert cell_names_entity("一等奖学金的评定条件及相关说明", "等奖学") is False
-    assert cell_names_entity(SUMMARY_HEADER, "万妍妍") is False
+    assert cell_names_entity(SUMMARY_HEADER, "王丽丽") is False
 
 
 def test_a_too_short_window_is_not_evidence():
     """A window shorter than an entity (``王家`` for ``王家兴``) would match anything."""
-    row = "24级计科1班 24405010132 王家兴 16 16"
+    row = "示例班级 24405010132 王家兴 16 16"
 
     assert cell_names_entity(row, "王家兴") is True
     assert cell_names_entity(row, "王家") is False
 
 
 def test_degenerate_cells_are_not_evidence():
-    assert cell_names_entity("", "王务强") is False
+    assert cell_names_entity("", "张同学") is False
     assert cell_names_entity(GRADE_ROW, "") is False
     assert cell_names_entity(GRADE_ROW, "王") is False
     # empty cells (padding only) are skipped, not treated as a match
-    assert cell_names_entity("| | 王务强", "王务强") is True
+    assert cell_names_entity("| | 张同学", "张同学") is True
 
 
 # --------------------------------------------------------------------------- #
@@ -76,9 +76,9 @@ def test_degenerate_cells_are_not_evidence():
 def test_a_name_that_occupies_rows_identifies_them():
     hits = [NOTICE_PROSE, GRADE_ROW, PRACTICE_ROW, COMPETITION_CELL]
 
-    found = row_identifier_terms("王务强能评上校级三等奖学金吗", hits)
+    found = row_identifier_terms("张同学能评上校级三等奖学金吗", hits)
 
-    assert found == {"王务强"}
+    assert found == {"张同学"}
 
 
 def test_topic_words_are_not_identifiers():
@@ -102,14 +102,14 @@ def test_a_name_mentioned_in_prose_many_times_still_identifies_its_row():
     hits = [
         SUMMARY_HEADER,
         SUMMARY_HEADER,
-        PRACTICE_ROW.replace("王务强", "万妍妍"),
-        GRADE_ROW.replace("王务强", "万妍妍"),
+        PRACTICE_ROW.replace("张同学", "王丽丽"),
+        GRADE_ROW.replace("张同学", "王丽丽"),
         COMPETITION_CELL,
     ]
 
-    found = row_identifier_terms("万妍妍的综测排名是多少", hits)
+    found = row_identifier_terms("王丽丽的综测排名是多少", hits)
 
-    assert "万妍妍" in found
+    assert "王丽丽" in found
 
 
 def test_a_team_name_is_a_row_identifier():
@@ -120,7 +120,7 @@ def test_a_team_name_is_a_row_identifier():
 
 def test_identifier_terms_need_a_question_and_documents():
     assert row_identifier_terms("", [GRADE_ROW]) == set()
-    assert row_identifier_terms("王务强", []) == set()
+    assert row_identifier_terms("张同学", []) == set()
 
 
 def test_one_character_terms_never_identify_a_row():
@@ -131,16 +131,16 @@ def test_one_character_terms_never_identify_a_row():
 def test_the_chunk_cap_is_optional():
     hits = [GRADE_ROW, PRACTICE_ROW, COMPETITION_CELL]
 
-    assert "王务强" in row_identifier_terms("王务强的综测是多少", hits)
-    assert "王务强" not in row_identifier_terms("王务强的综测是多少", hits, max_chunks=1)
+    assert "张同学" in row_identifier_terms("张同学的综测是多少", hits)
+    assert "张同学" not in row_identifier_terms("张同学的综测是多少", hits, max_chunks=1)
 
 
 def test_the_repetition_bar_can_be_stricter_or_looser():
-    repeated = "\n".join(["王务强"] * 3)
+    repeated = "\n".join(["张同学"] * 3)
 
-    assert "王务强" not in row_identifier_terms("王务强的综测是多少", [repeated])
-    assert "王务强" in row_identifier_terms(
-        "王务强的综测是多少", [repeated], max_cell_repeats=3
+    assert "张同学" not in row_identifier_terms("张同学的综测是多少", [repeated])
+    assert "张同学" in row_identifier_terms(
+        "张同学的综测是多少", [repeated], max_cell_repeats=3
     )
 
 
@@ -187,7 +187,7 @@ def test_the_row_of_the_queried_person_is_promoted():
     ]
 
     picked = lookup(
-        "王务强能评上校级三等奖学金吗",
+        "张同学能评上校级三等奖学金吗",
         hits,
         ["notice", "grades", "practice", "competition"],
     )
@@ -206,7 +206,7 @@ def test_the_pass_reaches_a_file_that_routing_dropped():
     hits = [hit("notice", NOTICE_PROSE), hit("grades", GRADE_ROW)]
 
     picked = lookup(
-        "王务强能评上校级三等奖学金吗",
+        "张同学能评上校级三等奖学金吗",
         hits,
         ["notice", "grades"],
         in_scope=["notice"],
@@ -218,7 +218,7 @@ def test_the_pass_reaches_a_file_that_routing_dropped():
 def test_files_outside_the_users_selection_are_never_read():
     hits = [hit("grades", GRADE_ROW)]
 
-    picked = lookup("王务强能评上校级三等奖学金吗", hits, ["notice"])
+    picked = lookup("张同学能评上校级三等奖学金吗", hits, ["notice"])
 
     assert picked == []
 
@@ -239,7 +239,7 @@ def test_prose_that_merely_contains_the_word_promotes_nothing():
 def test_at_most_one_chunk_per_file():
     hits = [hit("grades", GRADE_ROW), hit("grades", PRACTICE_ROW)]
 
-    picked = lookup("王务强的综测是多少", hits, ["grades"])
+    picked = lookup("张同学的综测是多少", hits, ["grades"])
 
     assert len(picked) == 1
 
@@ -248,7 +248,7 @@ def test_the_number_of_promoted_chunks_is_capped(monkeypatch):
     monkeypatch.setattr(pipelines.settings, "KH_ENTITY_ROWS", 1)
     hits = [hit("grades", GRADE_ROW), hit("practice", PRACTICE_ROW)]
 
-    picked = lookup("王务强的综测是多少", hits, ["grades", "practice"])
+    picked = lookup("张同学的综测是多少", hits, ["grades", "practice"])
 
     assert len(picked) == 1
 
@@ -257,13 +257,13 @@ def test_the_pass_can_be_switched_off(monkeypatch):
     monkeypatch.setattr(pipelines.settings, "KH_ENTITY_ROWS", 0)
     hits = [hit("grades", GRADE_ROW)]
 
-    assert lookup("王务强的综测是多少", hits, ["grades"]) == []
+    assert lookup("张同学的综测是多少", hits, ["grades"]) == []
 
 
 def test_vector_only_retrieval_does_not_secretly_use_the_full_text_index():
     hits = [hit("grades", GRADE_ROW)]
 
-    assert lookup("王务强的综测是多少", hits, ["grades"], retrieval_mode="vector") == []
+    assert lookup("张同学的综测是多少", hits, ["grades"], retrieval_mode="vector") == []
 
 
 def test_a_broken_docstore_does_not_break_retrieval():
@@ -274,7 +274,7 @@ def test_a_broken_docstore_does_not_break_retrieval():
 
     assert (
         DocumentRetrievalPipeline._entity_row_docs(
-            self, "王务强的综测是多少", ["grades"], ["grades"]
+            self, "张同学的综测是多少", ["grades"], ["grades"]
         )
         == []
     )

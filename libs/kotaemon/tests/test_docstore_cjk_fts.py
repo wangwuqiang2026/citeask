@@ -24,7 +24,7 @@ from kotaemon.storages.docstores.lancedb import (
 
 DOCUMENTS = [
     Document(
-        text="某班级,24405010001,李明辉,8,24,2025上半年8学时",
+        text="某班级,24405010001,李同学,8,24,2025上半年8学时",
         metadata={"file_name": "社会实践完成情况表.xlsx"},
     ),
     Document(
@@ -57,14 +57,14 @@ def store(workdir):
 
 def test_a_chinese_question_matches_the_row(store):
     """The tokenizer must split Chinese into grams, so a *question* matches a row."""
-    docs = store.query("李明辉的社会实践完成得怎么样", top_k=5)
+    docs = store.query("李同学的社会实践完成得怎么样", top_k=5)
 
     assert docs, "the full-text channel returned nothing for a Chinese question"
-    assert any("李明辉" in doc.text for doc in docs)
+    assert any("李同学" in doc.text for doc in docs)
 
 
 def test_an_exact_name_matches(store):
-    docs = store.query("李明辉", top_k=5)
+    docs = store.query("李同学", top_k=5)
 
     assert [doc.doc_id for doc in docs][:1] == ["a"]
 
@@ -78,11 +78,11 @@ def test_a_scoped_query_still_finds_the_row(store):
     to work, which is why the bug survived the corpus-wide checks
     (MODIFICATIONS §5.19). The filter has to be applied after the match.
     """
-    assert [doc.doc_id for doc in store.query("李明辉", top_k=5, doc_ids=["a"])] == ["a"]
-    assert [doc.doc_id for doc in store.query("李明辉", top_k=5, doc_ids=["a", "b"])][
+    assert [doc.doc_id for doc in store.query("李同学", top_k=5, doc_ids=["a"])] == ["a"]
+    assert [doc.doc_id for doc in store.query("李同学", top_k=5, doc_ids=["a", "b"])][
         :1
     ] == ["a"]
-    assert store.query("李明辉", top_k=5, doc_ids=["b"]) == []
+    assert store.query("李同学", top_k=5, doc_ids=["b"]) == []
 
 
 def test_the_index_timestamp_is_recorded(store):
@@ -99,8 +99,8 @@ def test_an_index_built_by_an_older_version_is_rebuilt(store, workdir):
     Path(store._fts_marker_path).unlink()
 
     assert store.ensure_fts_index() is True
-    docs = store.query("李明辉的社会实践完成得怎么样", top_k=5)
-    assert any("李明辉" in doc.text for doc in docs)
+    docs = store.query("李同学的社会实践完成得怎么样", top_k=5)
+    assert any("李同学" in doc.text for doc in docs)
 
 
 def test_an_empty_document_set_does_not_crash_the_query(workdir):
@@ -109,5 +109,5 @@ def test_an_empty_document_set_does_not_crash_the_query(workdir):
         path=str(workdir / "empty"), collection_name="index_empty"
     )
 
-    assert empty.query("李明辉", top_k=3) == []
+    assert empty.query("李同学", top_k=3) == []
     assert empty.ensure_fts_index() is False

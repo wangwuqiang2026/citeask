@@ -9,7 +9,7 @@ from .base import BaseDocumentStore
 MAX_DOCS_TO_GET = 10**4
 
 #: The full-text index used to require ``en_stem``, which cannot match Chinese: the
-#: tokenizer splits on whitespace, so a row like ``24405010001,李明辉,8`` is only found
+#: tokenizer splits on whitespace, so a row like ``24405010001,李同学,8`` is only found
 #: by an *exact* single-token query and a real question returns nothing. The retriever
 #: then silently fell back to vector-only search — and a dense table row embeds far from
 #: a question, so the row was never retrieved (MODIFICATIONS §5.15). The n-gram base

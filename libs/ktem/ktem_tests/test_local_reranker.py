@@ -79,7 +79,7 @@ def test_the_file_name_counts_as_overlap():
     code = named_doc(
         "def gaussian(X, num_centers=10):\n    return np.exp(-d)", "代码.txt"
     )
-    prose = named_doc("计算机学院入党积极分子积分细则", "积分细则.pdf")
+    prose = named_doc("某学院入党积极分子积分细则", "积分细则.pdf")
 
     result = reranker.run([prose, code], "代码.txt讲了什么算法")
 

@@ -25,7 +25,7 @@ decision honest: never answer on a 0.18 match, but do not refuse a 0.38 match th
 the row.
 
 A table is not always rendered as a row of fields. A PDF (or any loader that emits one
-cell per line) turns the same row into ``10`` / ``星河队`` / ``李明辉`` / ``二等奖+推荐省赛``
+cell per line) turns the same row into ``10`` / ``星河队`` / ``李同学`` / ``二等奖+推荐省赛``
 lines, where no single line has "fields" at all and the row test above can never match.
 The name standing alone on its line *is* the cell, so that layout counts as well
 (MODIFICATIONS §5.19) - prose lines are far too long to ever be a whole cell.
@@ -59,7 +59,7 @@ DEFAULT_TERM_FLOOR = 0.33
 ENTITY_TERM_LENGTH = 3
 
 #: Longest CJK-only cell a 3-character window may match inside: a name/team cell is
-#: short (``欧阳佳饴``), a sentence or a labelled field is not.
+#: short (``欧阳明月``), a sentence or a labelled field is not.
 MAX_CELL_LENGTH = 6
 
 #: How often a term may repeat inside one chunk and still read as a row value. An award
@@ -99,7 +99,7 @@ def best_similarity(scores: Iterable[float]) -> Optional[float]:
 def entity_terms(question: str, length: int = ENTITY_TERM_LENGTH) -> set[str]:
     """Entity-like terms of a question: CJK windows and 3+ character latin tokens.
 
-    ``李明辉的社会实践完成了吗`` yields ``李明辉``/``明辉的``/...; ``2025`` and student
+    ``李同学的社会实践完成了吗`` yields ``李同学``/``明辉的``/...; ``2025`` and student
     ids survive as-is. The windows overlap on purpose — the match only needs one.
     """
     terms: set[str] = set()
@@ -121,7 +121,7 @@ def row_looks_tabular(line: str, min_numbered_share: float = 0.6) -> bool:
     The distinction matters because a *prose* sentence can mention the same noun without
     being able to answer a question about it: ``图书馆`` appears in the points-rules
     document ("在图书馆借阅…加 2 分"), but that sentence cannot say how many books may be
-    borrowed. A row of ``24405010001 李明辉 8 24 2025上半年8学时`` can.
+    borrowed. A row of ``24405010001 李同学 8 24 2025上半年8学时`` can.
     """
     fields = [field for field in _FIELD_SPLIT.split(line) if field.strip()]
     if len(fields) < 3:
@@ -143,7 +143,7 @@ def line_is_a_cell(line: str, term: str) -> bool:
         星河队
         赵一鸣
         钱二毛
-        李明辉
+        李同学
         二等奖+推荐省赛
 
     ``row_looks_tabular`` cannot match that layout (a single field is not a row), yet the
@@ -163,14 +163,14 @@ def cell_names_entity(
     there puts a *wrong* chunk into the context, while routing merely widens the file
     scope. Two layouts must match:
 
-    * a field of a row: ``24405010135 王务强 75.45 …`` splits into fields, one of which is
+    * a field of a row: ``24405010135 张同学 75.45 …`` splits into fields, one of which is
       the name;
     * a cell of a vertical table (one cell per line, as OCR emits it): the line itself.
 
     A field such as ``一等奖学金:综合测评在班上前5名以内`` is prose that merely contains the
     window ``等奖学`` of ``三等奖学金`` — punctuation disqualifies it. A 3-character window
     also has to match *inside* a longer but still short CJK cell, because the question
-    ``欧阳佳饴的社会实践`` yields only ``欧阳佳``/``阳佳饴`` and never the whole name
+    ``欧阳明月的社会实践`` yields only ``欧阳明``/``阳明月`` and never the whole name
     (MODIFICATIONS §5.21).
     """
     body = str(line or "").strip()
@@ -203,7 +203,7 @@ def text_names_entity(
     decision: **file routing** (MODIFICATIONS §5.20), not the answer gate. Rule: an entity
     term occurs in a line that is a numbered row (:func:`row_looks_tabular`) or a short
     standalone cell — where "cell" means an exact cell *or* a cell that merely contains
-    the term, because a name is split into 3-character windows (``李明`` inside ``李明辉``).
+    the term, because a name is split into 3-character windows (``李明`` inside ``李同学``).
 
     ``min_term_length`` drops the one-character runs :func:`entity_terms` returns for a
     short CJK run: ``一、二、三等奖`` and ``加5分`` yield the terms ``二``/``三``/``分``,
@@ -256,7 +256,7 @@ def row_identifier_terms(
     *how* the term appears:
 
     * a row identifier occupies a **cell** (:func:`cell_names_entity`), once or twice
-      per chunk — ``24405010135 王务强 75.45 …``, ``万物兴`` on its own line;
+      per chunk — ``24405010135 张同学 75.45 …``, ``万物兴`` on its own line;
     * a topic word is prose (``奖学金`` inside a sentence) or a **column value** that
       repeats down the chunk (``三等奖`` ten times in one OCR chunk).
 

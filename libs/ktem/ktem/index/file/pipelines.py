@@ -599,7 +599,7 @@ class DocumentRetrievalPipeline(BaseFileIndexRetriever):
         """Chunks that name the question's entity in a cell of a table row.
 
         A question about one student is a row lookup, and the row is not what a vector
-        query ranks first: on the scholarship corpus ``王务强``'s standing row scores
+        query ranks first: on the scholarship corpus ``张同学``'s standing row scores
         0.351 while the notice that only *sets the rules* scores 0.583, and the 0.80
         relative cut drops both the grade table and the practice table before the
         context is built — the model then answers "cannot determine" although every

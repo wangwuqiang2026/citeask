@@ -150,18 +150,18 @@ def test_a_changed_profile_changes_the_cache_key():
 # --------------------------------------------------------------------------- #
 # entity evidence: a profile says what a file is about, not who is in it (§5.20)
 # --------------------------------------------------------------------------- #
-GRADE_ROW = "24405010002 顾晓东 65 75.7 70.35 23\n24405010001 李明辉 75.45 84.27 79.86 4"
+GRADE_ROW = "24405010002 顾晓东 65 75.7 70.35 23\n24405010001 李同学 75.45 84.27 79.86 4"
 PROSE = "第七条 在图书馆借阅思想政治类书籍，每学期每次加 2 分，最高不超过 10 分。"
-COMPETITION = "10\n星河队\n赵一鸣\n钱二毛\n李明辉\n二等奖+推荐省赛"
+COMPETITION = "10\n星河队\n赵一鸣\n钱二毛\n李同学\n二等奖+推荐省赛"
 
 
 def test_a_name_inside_a_table_row_is_evidence():
-    assert text_names_entity("李明辉的综测可以评国家励志奖学金吗", GRADE_ROW) is True
+    assert text_names_entity("李同学的综测可以评国家励志奖学金吗", GRADE_ROW) is True
 
 
 def test_a_name_that_occupies_its_own_cell_is_evidence():
-    """The window ``李明`` has to match the cell ``李明辉``, not equal it."""
-    assert text_names_entity("李明辉进省赛了吗", COMPETITION) is True
+    """The window ``李明`` has to match the cell ``李同学``, not equal it."""
+    assert text_names_entity("李同学进省赛了吗", COMPETITION) is True
 
 
 def test_a_prose_mention_is_not_evidence():
@@ -172,14 +172,14 @@ def test_a_prose_mention_is_not_evidence():
 def test_degenerate_input_is_not_evidence():
     """Routing runs on every question: an empty question or chunk must fall through."""
     assert text_names_entity("", GRADE_ROW) is False
-    assert text_names_entity("李明辉的综测是多少", "") is False
+    assert text_names_entity("李同学的综测是多少", "") is False
 
 
 def test_a_long_description_row_does_not_borrow_the_name():
     """A job-description row is tabular too; the entity still has to be in it."""
     description = "002000 中央办公厅 老干部局 综合管理岗位一级主任科员及以下 普通职位"
 
-    assert text_names_entity("李明辉的综测是多少", description) is False
+    assert text_names_entity("李同学的综测是多少", description) is False
 
 
 def test_one_character_terms_are_not_entity_evidence():
@@ -200,7 +200,7 @@ def test_entity_evidence_files_are_ranked_by_how_often_they_name_it():
     ]
 
     ranked = entity_evidence_files(
-        "李明辉的综测是多少", hits, ["points", "practice", "pdf"], max_files=2
+        "李同学的综测是多少", hits, ["points", "practice", "pdf"], max_files=2
     )
 
     assert ranked == ["points", "practice"]
@@ -209,7 +209,7 @@ def test_entity_evidence_files_are_ranked_by_how_often_they_name_it():
 def test_entity_evidence_never_widens_the_users_selection():
     hits = [("points", GRADE_ROW)]
 
-    assert entity_evidence_files("李明辉的综测是多少", hits, ["practice"]) == []
+    assert entity_evidence_files("李同学的综测是多少", hits, ["practice"]) == []
 
 
 def test_entity_evidence_is_empty_without_a_name():
@@ -218,7 +218,7 @@ def test_entity_evidence_is_empty_without_a_name():
 
 def test_entity_evidence_is_empty_without_a_selection():
     """An empty selection must not turn into "search everything"."""
-    assert entity_evidence_files("李明辉的综测是多少", [("points", GRADE_ROW)], []) == []
+    assert entity_evidence_files("李同学的综测是多少", [("points", GRADE_ROW)], []) == []
 
 
 def test_entity_files_are_appended_without_duplicates():

@@ -147,7 +147,7 @@ def test_the_threshold_is_inclusive(scores, expected):
 # table rows: a name in a spreadsheet row is evidence at a low similarity
 # --------------------------------------------------------------------------- #
 TABLE_ROW = (
-    "某班级,24405010001,李明辉,8,24,2025上半年8学时,"
+    "某班级,24405010001,李同学,8,24,2025上半年8学时,"
     "某班级,24405010002,孙梅,4,24,2025上半年16学时"
 )
 PROSE = (
@@ -160,9 +160,9 @@ def row_doc(score, text=TABLE_ROW):
 
 
 def test_entity_terms_are_three_character_windows():
-    terms = entity_terms("李明辉的社会实践完成了吗")
+    terms = entity_terms("李同学的社会实践完成了吗")
 
-    assert "李明辉" in terms  # the name the table actually contains
+    assert "李同学" in terms  # the name the table actually contains
     assert "社会实践" not in terms  # windows are 3 characters long
     assert "2025" in entity_terms("2025 年的学时")  # digits survive intact
 
@@ -181,7 +181,7 @@ def test_a_table_row_naming_the_row_counts_as_evidence():
             [0.38],
             0.45,
             documents=documents,
-            question="李明辉的社会实践完成了吗",
+            question="李同学的社会实践完成了吗",
             term_floor=0.33,
         )
         is False
@@ -189,7 +189,7 @@ def test_a_table_row_naming_the_row_counts_as_evidence():
 
 
 def test_below_the_term_floor_it_is_still_refused():
-    """0.30 for "李明辉的体重是多少": the row exists, the attribute does not."""
+    """0.30 for "李同学的体重是多少": the row exists, the attribute does not."""
     documents = [row_doc(0.30)]
 
     assert (
@@ -197,7 +197,7 @@ def test_below_the_term_floor_it_is_still_refused():
             [0.30],
             0.45,
             documents=documents,
-            question="李明辉的身高是多少",
+            question="李同学的身高是多少",
             term_floor=0.33,
         )
         is True
@@ -225,12 +225,12 @@ def test_a_prose_mention_is_not_evidence():
 def test_row_looks_tabular_needs_numbered_fields():
     assert row_looks_tabular(TABLE_ROW) is True
     assert row_looks_tabular(PROSE) is False
-    assert row_looks_tabular("李明辉") is False
+    assert row_looks_tabular("李同学") is False
 
 
 def test_without_documents_the_decision_is_unchanged():
     assert should_refuse([0.38], 0.45) is True
-    assert should_refuse([0.38], 0.45, documents=None, question="李明辉") is True
+    assert should_refuse([0.38], 0.45, documents=None, question="李同学") is True
 
 
 def test_a_topic_word_in_every_chunk_is_not_evidence():
@@ -243,15 +243,15 @@ def test_a_topic_word_in_every_chunk_is_not_evidence():
 def test_evidence_without_a_term_or_a_text_is_not_evidence():
     """Degenerate input must fall through, not raise (the gate runs on every answer)."""
     assert specific_term_evidence("", [row_doc(0.40)]) is False
-    assert specific_term_evidence("李明辉的社会实践完成了吗", []) is False
+    assert specific_term_evidence("李同学的社会实践完成了吗", []) is False
 
 
 def test_require_tabular_false_accepts_any_verbatim_match():
     """The escape hatch used by tests/tools: every verbatim hit counts, twice over."""
-    documents = [row_doc(0.40, text="李明辉 75.45"), row_doc(0.40, text="李明辉 75.45")]
+    documents = [row_doc(0.40, text="李同学 75.45"), row_doc(0.40, text="李同学 75.45")]
 
-    assert specific_term_evidence("李明辉", documents) is False  # not a row, not a cell
-    assert specific_term_evidence("李明辉", documents, require_tabular=False) is True
+    assert specific_term_evidence("李同学", documents) is False  # not a row, not a cell
+    assert specific_term_evidence("李同学", documents, require_tabular=False) is True
 
 
 def test_abstain_events_answers_a_table_row_below_the_threshold(monkeypatch):
@@ -261,7 +261,7 @@ def test_abstain_events_answers_a_table_row_below_the_threshold(monkeypatch):
     monkeypatch.setattr(simple_module, "log_abstention", lambda *a: None)
 
     events = abstain_events(
-        "李明辉的社会实践完成了吗", [row_doc(0.38)], threshold=0.45
+        "李同学的社会实践完成了吗", [row_doc(0.38)], threshold=0.45
     )
 
     assert events == []
@@ -273,17 +273,17 @@ def test_abstain_events_answers_a_table_row_below_the_threshold(monkeypatch):
 VERTICAL_ROW = (
     "2026年学科竞赛校赛成绩\n序号\n队名\n成员1（队长）\n成员2\n成员3\n奖项\n"
     "9\n远航队\n林静怡\n高文静\n程雅琴\n二等奖+推荐省赛\n"
-    "10\n星河队\n赵一鸣\n钱二毛\n李明辉\n二等奖+推荐省赛\n"
+    "10\n星河队\n赵一鸣\n钱二毛\n李同学\n二等奖+推荐省赛\n"
     "11\n青柏队\n马俊杰\n方志成\n罗晓博\n二等奖+推荐省赛\n"
 )
 
 
 def test_a_name_on_its_own_line_is_a_cell():
-    assert row_looks_tabular("李明辉") is False  # one field is not a row
-    assert line_is_a_cell("李明辉", "李明辉") is True
-    assert line_is_a_cell("  李明辉 ", "李明辉") is True  # loader padding
-    assert line_is_a_cell("| 李明辉 |", "李明辉") is True
-    assert line_is_a_cell("钱二毛", "李明辉") is False
+    assert row_looks_tabular("李同学") is False  # one field is not a row
+    assert line_is_a_cell("李同学", "李同学") is True
+    assert line_is_a_cell("  李同学 ", "李同学") is True  # loader padding
+    assert line_is_a_cell("| 李同学 |", "李同学") is True
+    assert line_is_a_cell("钱二毛", "李同学") is False
     assert line_is_a_cell(PROSE, "图书馆") is False  # a prose line is a sentence
 
 
@@ -295,13 +295,13 @@ def test_a_vertical_table_row_counts_as_evidence():
     """
     documents = [row_doc(0.412, text=VERTICAL_ROW)]
 
-    assert specific_term_evidence("李明辉进省赛了吗", documents) is True
+    assert specific_term_evidence("李同学进省赛了吗", documents) is True
     assert (
         should_refuse(
             [0.412],
             0.45,
             documents=documents,
-            question="李明辉进省赛了吗",
+            question="李同学进省赛了吗",
             term_floor=0.33,
         )
         is False
@@ -333,7 +333,7 @@ def test_a_vertical_cell_below_the_term_floor_is_still_refused():
             [0.30],
             0.45,
             documents=documents,
-            question="李明辉进省赛了吗",
+            question="李同学进省赛了吗",
             term_floor=0.33,
         )
         is True
@@ -352,7 +352,7 @@ def test_abstain_events_answers_a_vertical_table_below_the_threshold(monkeypatch
     monkeypatch.setattr(simple_module, "log_abstention", lambda *a: None)
 
     events = abstain_events(
-        "李明辉进省赛了吗", [row_doc(0.412, text=VERTICAL_ROW)], threshold=0.45
+        "李同学进省赛了吗", [row_doc(0.412, text=VERTICAL_ROW)], threshold=0.45
     )
 
     assert events == []
@@ -383,7 +383,7 @@ def test_a_question_that_names_the_file_is_answered_below_the_threshold():
 
 
 def test_the_file_name_test_does_not_fire_by_accident():
-    documents = [file_doc(0.35, "计算机学院关于校级奖学金评定官网通知.docx")]
+    documents = [file_doc(0.35, "某学院关于校级奖学金评定官网通知.docx")]
 
     assert named_file_evidence("奖学金怎么评", documents) is False
     assert (

@@ -24,6 +24,8 @@
 
 这一步验证的是**评测链路通不通**（语料入库 → 检索 → Hit@k / 拒答统计），
 数字本身取决于你用哪个向量模型——`fixture-points.json` 的注释里写了这一点。
+本机（通义 `text-embedding-v3`）的实测结果：Hit@1 **87.5%** / MRR **0.900** / 事实覆盖 **100%** /
+无答案题拒答 **100%** / P50 **493 ms**，结果文件在 `results-public.md` 与 `results-public.json`。
 题集与语料的一致性有单测兜底：`tools/tests/test_fixture_eval.py` 会检查每个
 `expect_pages` 在语料里存在、每个 `expect_terms` 真的出现在对应页、无答案题的词真的
 不在语料里——所以题目不会悄悄和语料脱节。

@@ -8,6 +8,25 @@
 
 面向的场景很具体：把一份**扫描版 PDF**（学校/单位的积分办法）变成可以按页引用、能回答细节问题（"英语四六级加几分"）的知识库。
 
+| 聊天：流式回答 + 逐页引用 | 证据抽屉：点引用定位到页 |
+|---|---|
+| ![聊天](docs/images/chat-answer.png) | ![证据](docs/images/chat-evidence.png) |
+
+![界面演示：回答 → 证据 → 文件 → 资源](docs/images/demo.gif)
+
+---
+
+## 这个仓库交付了什么
+
+不是"把开源项目跑起来"：仓库累计 **45 个提交、343 个源文件改动**（不含构建产物与 lock），围绕一条完整的文档问答链路做了四块工作：
+
+- **数据入口**：修复默认配置下检索被静默跳过、扫描件正文未入库、`.docx` 索引失败三类缺陷；新增按页决策的 OCR 抽取器。
+- **检索与评测**：自建只跑检索层、零 token 成本的评测，用同一套题驱动切块、重排、拒答闸门和向量模型选型。
+- **全栈重构**：把单页应用替换为 React 18 + FastAPI `/api/v1`（39 个接口、SSE 流式、HttpOnly Cookie、管理员 RBAC），并保留 `/legacy` 回滚路径。
+- **工程化**：399 个 Python 用例 + 43 个前端单测进 CI、一键启动、`doctor` 自检、查询 trace 与 token 记账。
+
+逐条证据、定位过程和实测数字见 [MODIFICATIONS.md](MODIFICATIONS.md)。
+
 ---
 
 ## 亮点速览
@@ -17,40 +36,46 @@
 | 修复**检索静默失效**：默认配置下召回恒为空，模型绕过文档凭记忆作答 | 同一条默认路径：修复前召回 0 条 → 修复后正确命中并带引用（[§2.5](MODIFICATIONS.md#25-验证证据)） |
 | 新增**扫描件 OCR 检索链路**：文字层只有标题时按页 OCR 后再入库 | 同一份 PDF 正文从 **209 字符 → 2322 字符**，问题「英语四六级加几分」得到「四级 +4 分 / 六级 +6 分」并引用 `[第 2 页]`（[§2.7](MODIFICATIONS.md#27-同类缺陷二扫描版-pdf-的正文根本没进索引)） |
 | 上游**无 i18n 机制**下做中文界面：译文不落源码 | **336** 条词条、**296** 处标签本地化，剩余 18 条为刻意保留的品牌/标识符（[§3](MODIFICATIONS.md#三界面汉化引入翻译库译文不入代码)） |
-| 建立**检索评测**（只跑检索层，零 token 成本） | 27 条问题 + 12 条无答案题；同一套题把 Hit@1 从基线 **59.3%** 做到 **88.9%**（单文件口径）、MRR 0.702 → **0.933**（[评测](#检索评测)） |
-| 让评测**在干净环境可复现** | 仓库自带 5 页示例语料 + 9 题配套题集，配套单测保证"题目引用的页/事实"真的在那份语料里（`tools/tests/test_fixture_eval.py`） |
+| **全栈重构**：Gradio 单页 → React 18 + FastAPI `/api/v1` | **39** 个接口、SSE 流式、HttpOnly Cookie、管理员 RBAC；**57** 个 API 测试 + **43** 个前端单测；首屏 JS **272.11 kB** gzip；`KH_WEB_UI=0` 可回滚（[§5.25](MODIFICATIONS.md#525-第二代前端react-spa--fastapi2026-10-18) / [§5.29](MODIFICATIONS.md#529-m4-起步模型供应商与-mcp-的增删改2026-10-19)） |
+| 建立**检索评测**（只跑检索层，零 token 成本） | 私有 27 题 + 12 无答案：Hit@1 **59.3% → 88.9%**（单文件）、MRR 0.702 → **0.933**；公开 9 题可复现 Hit@1 **87.5%** / MRR **0.900**（[评测](#检索评测)） |
+| 让评测**在干净环境可复现** | 仓库自带 5 页示例语料 + 9 题配套题集 + 结果文件；配套单测保证"题目引用的页/事实"真的在那份语料里（`tools/tests/test_fixture_eval.py`） |
 | 向量模型**用评测选型**，而不是凭感觉 | 4 个候选模型横向对比，Hit@1 从 **36.7% → 60.0%**（30 题版本实测） |
 | 向量化可切换：**通义 API（默认）** 或 **本地 ONNX**（离线兜底） | 通义与本地 mpnet 指标相当（Hit@1 均 60.0%，30 题版本），前者省掉 1 GB 本地模型 |
+| **成本与延迟可量化**：默认关闭"每个召回块调一次 LLM 打分" | 1 次调用 / **3291 token**（关）vs 11 次 / **9043 token**（开）；检索 P50 约 **1.6 s**（[§5.10](MODIFICATIONS.md#510-成本与延迟每题的-token-与-p50p95)） |
 
-自动化测试 **322 个用例**全绿，全部离线运行（不联网、不调用模型）；CI 每次 push 都会跑一遍。
+自动化测试 **399 个 Python 用例 + 43 个前端单测**全绿，全部离线运行（不联网、不调用模型）；CI 每次 push 都会跑一遍。
 
 ---
 
 ## 架构
 
 ```
-┌──────────────── Gradio 界面（中文，词表驱动）────────────────┐
-│   聊天   │   文件集合   │   资源   │   设置   │   帮助       │
-└─────────────────────────────┬──────────────────────────────┘
-                              │ 事件 / 会话状态
-┌─────────────────────────────▼──────────────────────────────┐
-│ ktem 应用层：会话管理、检索范围选择、引用面板渲染           │
-└────────┬────────────────────────────────────┬──────────────┘
-         │ 索引                                │ 检索
-┌────────▼───────────────────┐      ┌─────────▼──────────────┐
+浏览器
+├─ /            React 18 + TypeScript + Vite（web/dist 已提交，运行时不需要 Node）
+├─ /api/v1/*    FastAPI：JSON + SSE（ktem/api → ktem/services，39 个接口）
+└─ /legacy/     经典 Gradio（迁移期回滚；KH_WEB_UI=0 时回到根路径）
+
+                         │ 会话 / 检索范围 / 证据
+┌────────────────────────▼──────────────────────────────┐
+│ ktem 应用层：会话管理、检索、引用、设置、资源、用户    │
+└────────┬───────────────────────────────────┬──────────┘
+         │ 索引                               │ 检索
+┌────────▼───────────────────┐      ┌────────▼──────────────┐
 │ 文件抽取                    │      │ 混合检索                │
-│  · PDF：OCRPDFReader       │      │  · Chroma 向量库         │
+│  · PDF：OCRPDFReader       │      │  · 向量库（通义/本地）   │
 │    ├ 文字层足够 → 直接用    │      │  · LanceDB 文档库        │
-│    └ 扫描页 → 本地 OCR     │      │  · top_k / MMR / 重排    │
-└────────┬───────────────────┘      └─────────┬──────────────┘
-         │ 向量化                             │
-┌────────▼────────────────────────────────────▼──────────────┐
+│    └ 扫描页 → 本地 OCR     │      │  · top_k / 重排 / 拒答   │
+└────────┬───────────────────┘      └────────┬──────────────┘
+         │ 向量化                              │
+┌────────▼───────────────────────────────────▼──────────────┐
 │ 向量化：通义 text-embedding-v3（默认，API）                  │
-│        或本地 FastEmbed（离线兜底）     对话：DeepSeek（API） │
+│        或本地 FastEmbed（离线兜底）      对话：DeepSeek（API） │
 └────────────────────────────────────────────────────────────┘
 
-词表：libs/ktem/ktem/assets/i18n/zh.json（生成后提交入库，clone 即中文）
+界面文案：libs/ktem/ktem/assets/i18n/zh.json（Gradio）+ web/src/lib/i18n.ts（React）
 ```
+
+路由只做鉴权、参数校验与序列化，业务在 `ktem/services/*`（不 import gradio，因此能脱离 UI 单测）；`app.py` 负责装配 `/`、`/api/v1` 与 `/legacy`。会话使用 HMAC 签名的 HttpOnly Cookie，管理员接口统一 `admin_required`，供应商列表不返回 `spec`（API key 只在管理员单条详情里）。
 
 ---
 
@@ -102,6 +127,16 @@ Gradio 4.39 没有 `gr.I18n`，界面文案散落在 20 多个文件里。做法
 
 评测集与语料的一致性有单测兜底（`tools/tests/test_fixture_eval.py`：题目引用的页码必须存在、
 每个关键事实必须真的出现在那份语料里），所以「题目跑出来的数字」不会因为语料被改而悄悄漂移。
+
+公开示例语料的实测（8 道可答题 + 1 道无答案，5 个块；本机通义 `text-embedding-v3`）：
+
+| Hit@1 | Hit@3 | Hit@5 | MRR | 关键事实覆盖 | 无答案拒答 | 可答题误拒 | P50 |
+|---|---|---|---|---|---|---|---|
+| **87.5%** | 87.5% | **100%** | **0.900** | **100%** | **100%** | 12.5% | 493 ms |
+
+结果文件：[`tools/eval/results-public.md`](tools/eval/results-public.md)、
+[`results-public.json`](tools/eval/results-public.json)。数字会随向量模型变化，所以它证明的是
+**链路与题集可复现**；效果数字以私有 27 题为准，两者口径不要相加或混用。
 
 在**自己的语料**上评测（27 条问题；切块 512/64，默认重排）：
 
@@ -364,6 +399,20 @@ Hit@1 不变——词法重排能纠正第 2–3 名，纠正不了"第 1 名就
 
 ---
 
+## 2 分钟演示
+
+演示语料是仓库自带的 5 页虚构 PPTX（`tools/eval/fixtures/points-fixture.pptx`），不涉及任何真实文件：
+
+1. 双击 `start.bat`，打开 `http://127.0.0.1:7860`，登录 `admin` / `admin`。
+2. 「文件」→ 上传 `tools/eval/fixtures/points-fixture.pptx`，等索引完成。
+3. 「对话」→ 问「英语四级和六级分别加几分？」→ 回答给出「四级 +4 分 / 六级 +6 分」，引用标记为上标 `1`。
+4. 点引用标记 → 右侧证据抽屉定位到第 2 页（36% 相关性、片段原文）；再问「这份细则的满分是多少分？」验证跨页引用。
+5. 「资源」看索引 / 模型 / 用户管理；「设置」看 schema 驱动表单；`/legacy/` 是随时可回滚的经典界面。
+
+演示数据隔离：用 `KH_APP_DATA_DIR=<临时目录>` 启动，测试、截图与索引都不会写进真实的 `ktem_app_data/`。
+
+---
+
 ## 快速开始
 
 **双击 `start.bat`** 就能启动（Windows）。它会调用 PowerShell 脚本并绕过执行策略，
@@ -437,13 +486,15 @@ npm run build    # 产出到 web/dist（提交这份产物）
 - 改完前端必须 `npm run build`，Python 服务读的是 `dist`，不是 `src`。
 - API 前缀 `/api/v1`，会话 Cookie `ktem_session`（HttpOnly）；接口清单与设计说明见
   [MODIFICATIONS.md §5.25](MODIFICATIONS.md#525-第二代前端react-spa--fastapi2026-10-18)
-  与 [§5.28](MODIFICATIONS.md#528-m3资源帮助与账户页面2026-10-19)。
+  与 [§5.29](MODIFICATIONS.md#529-m4-起步模型供应商与-mcp-的增删改2026-10-19)。
 - 深色模式、会话、证据抽屉等前端状态说明见 `web/README.md`。
 
 主要配置项（详见 [MODIFICATIONS.md §3.7](MODIFICATIONS.md#37-配置与使用)）：
 
 | 配置项 | 默认 | 作用 |
 |---|---|---|
+| `KH_APP_DATA_DIR` | `./ktem_app_data` | 文档、SQLite、LanceDB、模型缓存与会话密钥的根目录；演示/测试时指向独立目录 |
+| `KH_WEB_UI` | `1` | 根路径用 React SPA；设 `0` 回滚到经典 Gradio |
 | `KH_UI_LANGUAGE` | `zh` | 界面语言；设 `en` 还原上游英文界面 |
 | `KH_ANSWER_LANGUAGE` | 跟随界面语言 | 模型**回答**语言 |
 | `PDF_OCR_ENABLED` | `true` | 扫描页走本地 OCR；`false` 回退到原抽取器 |
@@ -480,7 +531,7 @@ npm run build    # 产出到 web/dist（提交这份产物）
 （`ktem_tests/test_entity_rows.py`、`ktem_tests/test_render_score.py`）、示例语料与题集的一致性
 （`tools/tests/test_fixture_eval.py`）。
 
-新增的 Web API / 前端托管契约（56 例，`MODIFICATIONS.md` §5.25–§5.29）：
+新增的 Web API / 前端托管契约（57 例，`MODIFICATIONS.md` §5.25–§5.29）：
 
 ```powershell
 # 本机访问不到 huggingface.co 时先打开离线开关：否则 App() 会为重试
@@ -503,7 +554,10 @@ $env:HF_HUB_OFFLINE="1"; $env:TRANSFORMERS_OFFLINE="1"
 cd web; npm test; npm run typecheck; npm run lint
 ```
 
-新增模块的本地覆盖率（`coverage run -m pytest … && coverage report`，实测 322 个用例）：
+实测：Python **399 passed**（其中 Web API 契约 57 例），前端 `npm test` **43 passed**；
+typecheck / lint 均无告警。
+
+新增模块的本地覆盖率（`coverage run -m pytest … && coverage report`，实测 321 个用例）：
 `abstain.py` 100% · `selector.py` 100% · `routing.py` 100% · `file_profile.py` 100% ·
 `llms/usage.py` 100% · `utils/trace.py` 98% · `rerankings/local_lexical.py` 98% ·
 `loaders/pptx_loader.py` 82% · `index/file/repair.py` 80%；`i18n.py` 与 `ocr_pdf_loader.py`
@@ -517,8 +571,9 @@ README 里出现的每个数字都能用一条命令复现；"未测"就是未�
 
 | 数字 | 命令 | 证据 |
 |---|---|---|
-| 全库 Hit@1 77.8% / Hit@3 88.9% / MRR 0.847 / facts 81.5%（27 题，512/64 切块，默认重排） | `python tools/eval_retrieval.py --eval tools/eval/zh-points-rules.json --corpus "你的语料.pdf" --out tools/eval/results.md --json tools/eval/results.json` | [tools/eval/results.md](tools/eval/results.md)、[results.json](tools/eval/results.json) |
+| 全库 Hit@1 77.8% / Hit@3 88.9% / MRR 0.847 / facts 81.5%（27 题，512/64 切块，默认重排） | **私有语料（含个人信息，未随仓库发布）**：`python tools/eval_retrieval.py --eval tools/eval/zh-points-rules.json --corpus "你的语料.pdf" --out tools/eval/results.md --json tools/eval/results.json` | [tools/eval/results.md](tools/eval/results.md)、[results.json](tools/eval/results.json) |
 | 单文件（`--scope`）Hit@1 88.9% / MRR 0.933 | 上一条加 `--scope "你的语料"` | 终端输出；口径见本文件「切块粒度」 |
+| 公开示例语料 9 题（8 可答 + 1 无答案）：Hit@1 **87.5%** / MRR **0.900** / 事实 **100%** | 上传 `tools/eval/fixtures/points-fixture.pptx` → `python -X utf8 tools/eval_retrieval.py --eval tools/eval/fixture-points.json` | [results-public.md](tools/eval/results-public.md)、[results-public.json](tools/eval/results-public.json)；一致性由 `tools/tests/test_fixture_eval.py` 守住 |
 | 切块 A/B：55.6% → 88.9% | 同一套题，分别用 `chunk_size=0` 与 512/64 重建那份语料 | 本文件「切块粒度」、`MODIFICATIONS.md` §5.7 |
 | 重排 A/B：Hit@3 85.2% → 88.9%，P50 1053 → 1303 ms | 同一套题，加 `--rerank off` / `--rerank on` | 本文件「重排」、`MODIFICATIONS.md` §5.9 |
 | 拒答：无答案题 91.7% / 可答题误拒 0% | `python tools/eval_retrieval.py --eval tools/eval/zh-no-answer.json`（阈值见 `KH_ABSTAIN_SCORE_THRESHOLD`） | `tools/eval/zh-no-answer.json`、`MODIFICATIONS.md` §5.8 |
@@ -526,8 +581,9 @@ README 里出现的每个数字都能用一条命令复现；"未测"就是未�
 | 索引健康（文件数、块数、向量数、空块比例、配置是否真生效） | `python tools/doctor.py --json <临时路径>` | 终端表格；`--strict` 让 WARN 也返回非零 |
 | 词表 336 条 | `python -m ktem.utils.i18n stats --language zh` | 终端输出 |
 | 正文 209 → 2322 字符（扫描件 OCR） | `python tools/reindex_corpus.py --match "积分细则"` 后查 `Source.note` | `ktem_app_data/user_data/sql.db` |
-| 测试通过数 | 上面「测试」一节的 pytest 命令 | 终端 / `.github/workflows/tests.yaml`（CI） |
-| 示例语料上的评测可跑通 | 上传 `tools/eval/fixtures/points-fixture.pptx` → `python -X utf8 tools/eval_retrieval.py --eval tools/eval/fixture-points.json` | 终端输出（数字取决于你的向量模型）；一致性由 `tools/tests/test_fixture_eval.py` 守住 |
+| 测试通过数：Python **399** / 前端 **43** | 上面「测试」一节的 pytest 命令；`cd web; npm test` | 终端 / `.github/workflows/tests.yaml`（CI） |
+| Web API 契约 **57** 例 / **39** 个接口 | `pytest libs\ktem\ktem_tests\test_api_*.py ...`；接口数：`grep -c '^@router\.' libs/ktem/ktem/api/*.py` | CI `tests` job；`libs/ktem/ktem/api/` |
+| 首屏 JS **272.11 kB** gzip | `cd web; npm run build` | 构建输出 `dist/assets/index-*.js` |
 
 > `tools/doctor.py` 的输出包含本机语料文件名，**不要把它提交进仓库**；
 > 需要留档时写到仓库外，或先脱敏。
@@ -537,29 +593,33 @@ README 里出现的每个数字都能用一条命令复现；"未测"就是未�
 ## 目录结构
 
 ```
-├─ app.py                      启动入口：装配词表、构建 UI、注入 <head> 脚本
-├─ flowsettings.py             模型池（DeepSeek / FastEmbed）与检索、语言的默认值
+├─ app.py                      FastAPI 宿主：装配 /（React SPA）、/api/v1、/legacy
+├─ flowsettings.py             模型池、检索/语言/数据目录（KH_APP_DATA_DIR）默认值
 ├─ libs/kotaemon/kotaemon/
-│  ├─ loaders/ocr_pdf_loader.py      OCR 感知的 PDF 抽取器（本次新增）
-│  └─ loaders/                      各类文件抽取器
+│  ├─ loaders/ocr_pdf_loader.py      OCR 感知的 PDF 抽取器
+│  └─ loaders/                      各类文件抽取器（docx/pptx/xls/PDF）
 ├─ libs/ktem/ktem/
-│  ├─ utils/i18n.py                  本地化流水线（采集 / 翻译 / 运行时 / JS 注入）
-│  ├─ utils/selector.py              检索范围选择的纯逻辑（可单测）
-│  ├─ assets/i18n/zh.json            中文词表（生成后入库）
-│  ├─ index/file/                    文件索引、抽取与检索管线
-│  └─ pages/                         各页面 UI
+│  ├─ api/                     FastAPI 路由：auth/meta/chat/conversations/files/
+│  │                           settings/users/resources/help/vendors（39 个接口）
+│  ├─ services/                业务层（不依赖 gradio，可脱离 UI 单测）
+│  ├─ utils/i18n.py            本地化流水线（采集 / 翻译 / 运行时 / JS 注入）
+│  ├─ utils/selector.py        检索范围选择的纯逻辑（可单测）
+│  ├─ assets/i18n/zh.json      中文词表（生成后入库）
+│  ├─ index/file/              文件索引、抽取与检索管线
+│  └─ pages/                   经典 Gradio 页面（保留在 /legacy）
+├─ web/                        React 18 + TypeScript + Vite（src + 已提交的 dist）
 ├─ tools/
-│  ├─ eval_retrieval.py         检索评测脚本（分类指标 / 范围限定 / 重排 A/B / 退出码）
-│  ├─ doctor.py                 自检：文件是否真进了索引、配置是否真生效、检索 smoke
-│  ├─ reindex_corpus.py         换模型或改切块后的索引重建
-│  ├─ eval/                     评测集、基线结果与评测说明
-│  └─ tests/                    上面这些工具的离线单测（CI 会跑）
-├─ start.bat                     双击启动（Windows；调用 scripts\bootstrap_windows.ps1）
+│  ├─ eval_retrieval.py        检索评测（分类指标 / 范围 / 重排 A/B / 退出码）
+│  ├─ doctor.py                自检：文件是否真进了索引、配置是否真生效、检索 smoke
+│  ├─ reindex_corpus.py        换模型或改切块后的索引重建
+│  ├─ eval/                    评测集、基线结果与评测说明
+│  └─ tests/                   工具链离线单测（CI 会跑）
+├─ docs/images/                演示截图与 GIF
+├─ start.bat                   双击启动（Windows；调用 scripts\bootstrap_windows.ps1）
 ├─ scripts/
-│  ├─ bootstrap_windows.ps1     一键启动（Windows，纯 ASCII）
-│  └─ download_pdfjs.sh         上游脚本：内置 PDF 阅读器
-├─ docs/*.zh.md                 帮助页中文文档
-└─ MODIFICATIONS.md             改造全过程记录（含定位过程、实测数据、踩坑）
+│  ├─ bootstrap_windows.ps1    一键启动（Windows，纯 ASCII）
+│  └─ download_pdfjs.sh        内置 PDF 阅读器脚本
+└─ MODIFICATIONS.md            改造全过程记录（定位过程、实测数据、踩坑）
 ```
 
 ---
@@ -591,14 +651,21 @@ README 里出现的每个数字都能用一条命令复现；"未测"就是未�
 - **重建过的旧文件，引用预览路径要重建一次才更新**：新上传/重建的文件，块元数据指向稳定的存储副本
   （`user_data/files/<hash>.<ext>`），预览可用（[§5.12](MODIFICATIONS.md)）；老索引里的指向是旧的临时路径，
   对非 PDF 已不再告警，PDF 需要 `tools/reindex_corpus.py` 重建一次。
+- **评测数字的语料边界**：88.9% / 0.933 来自私有真实语料（含个人信息，未随仓库发布）；仓库自带的
+  5 页虚构语料 + 9 题只用来验证"入库 → 检索 → Hit@k"链路可复现，不足以单独支撑效果结论。
+- **管理员的索引新增/删除仍留在 `/legacy`**：这类操作会写库、需要重启并依赖失败回滚，新界面提供
+  只读索引视图与文件级管理；`KH_WEB_UI=0` 是整站回滚开关。
+- **单机单用户定位**：没有多租户、限流、高并发与生产监控；`doctor`/trace 面向本机排障，不是线上观测平台。
 - 词表是机器翻译产物，个别术语（如 `Citation style`）可能需要人工润色，
   改 `ktem_app_data/i18n/zh.json` 即可覆盖仓库默认值。
 
 ---
 
-## 许可
+## 许可与上游
 
 本项目以 **Apache-2.0** 许可发布，许可证全文见 [LICENSE.txt](LICENSE.txt)。
+仓库包含 kotaemon 项目的代码（Apache-2.0），上游版权归其作者；归属说明见 [NOTICE](NOTICE)，
+本仓库的修改清单见 [MODIFICATIONS.md](MODIFICATIONS.md)。
 
 改动的定位过程、实测数据与验证清单见 [MODIFICATIONS.md](MODIFICATIONS.md)，
 后续演进计划见 [ROADMAP.md](ROADMAP.md)。

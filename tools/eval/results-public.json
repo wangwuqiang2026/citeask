@@ -1,0 +1,431 @@
+{
+  "summary": {
+    "questions": 8,
+    "corpus_chunks": 5,
+    "hit_at_1": 0.875,
+    "hit_at_3": 0.875,
+    "hit_at_5": 1.0,
+    "mrr": 0.9,
+    "facts": 1.0,
+    "latency_p50_ms": 493.1,
+    "latency_p95_ms": 550.1,
+    "k": 5
+  },
+  "categories": {
+    "T1": {
+      "questions": 3,
+      "corpus_chunks": 5,
+      "hit_at_1": 0.6666666666666666,
+      "hit_at_3": 0.6666666666666666,
+      "hit_at_5": 1.0,
+      "mrr": 0.7333333333333334,
+      "facts": 1.0,
+      "latency_p50_ms": 493.1,
+      "latency_p95_ms": 524.1,
+      "k": 5
+    },
+    "T2": {
+      "questions": 4,
+      "corpus_chunks": 5,
+      "hit_at_1": 1.0,
+      "hit_at_3": 1.0,
+      "hit_at_5": 1.0,
+      "mrr": 1.0,
+      "facts": 1.0,
+      "latency_p50_ms": 534.5,
+      "latency_p95_ms": 554.7,
+      "k": 5
+    },
+    "T3": {
+      "questions": 1,
+      "corpus_chunks": 5,
+      "hit_at_1": 1.0,
+      "hit_at_3": 1.0,
+      "hit_at_5": 1.0,
+      "mrr": 1.0,
+      "facts": 1.0,
+      "latency_p50_ms": 415.5,
+      "latency_p95_ms": 415.5,
+      "k": 5
+    },
+    "T4": {
+      "questions": 0,
+      "corpus_chunks": 5,
+      "hit_at_1": 0.0,
+      "hit_at_3": 0.0,
+      "hit_at_5": 0.0,
+      "mrr": 0.0,
+      "facts": 0.0,
+      "latency_p50_ms": 419.7,
+      "latency_p95_ms": 419.7,
+      "k": 5
+    }
+  },
+  "abstain": {
+    "threshold": 0.45,
+    "term_floor": 0.33,
+    "abstain_questions": 1,
+    "abstain_rate": 1.0,
+    "false_reject_rate": 0.125
+  },
+  "results": [
+    {
+      "id": "f01",
+      "category": "T1",
+      "question": "这份细则的满分是多少分？由哪几个部分组成？",
+      "expect_pages": [
+        "1"
+      ],
+      "abstain_case": false,
+      "top_score": 0.537,
+      "term_evidence": false,
+      "file_evidence": false,
+      "abstained": false,
+      "elapsed_ms": 493.1,
+      "rank": 0,
+      "mrr": 1.0,
+      "terms_ok": true,
+      "missing_terms": [],
+      "retrieved": [
+        {
+          "page": 1,
+          "score": 0.537
+        },
+        {
+          "page": 5,
+          "score": 0.46
+        },
+        {
+          "page": 4,
+          "score": 0.456
+        },
+        {
+          "page": 3,
+          "score": 0.446
+        },
+        {
+          "page": 2,
+          "score": 0.386
+        }
+      ]
+    },
+    {
+      "id": "f02",
+      "category": "T2",
+      "question": "英语四级和六级分别加几分？",
+      "expect_pages": [
+        "2"
+      ],
+      "abstain_case": false,
+      "top_score": 0.634,
+      "term_evidence": false,
+      "file_evidence": false,
+      "abstained": false,
+      "elapsed_ms": 414.9,
+      "rank": 0,
+      "mrr": 1.0,
+      "terms_ok": true,
+      "missing_terms": [],
+      "retrieved": [
+        {
+          "page": 2,
+          "score": 0.634
+        },
+        {
+          "page": 4,
+          "score": 0.485
+        },
+        {
+          "page": 3,
+          "score": 0.43
+        },
+        {
+          "page": 5,
+          "score": 0.372
+        },
+        {
+          "page": 1,
+          "score": 0.346
+        }
+      ]
+    },
+    {
+      "id": "f03",
+      "category": "T2",
+      "question": "计算机二级通过加几分？",
+      "expect_pages": [
+        "2"
+      ],
+      "abstain_case": false,
+      "top_score": 0.619,
+      "term_evidence": false,
+      "file_evidence": false,
+      "abstained": false,
+      "elapsed_ms": 538.9,
+      "rank": 0,
+      "mrr": 1.0,
+      "terms_ok": true,
+      "missing_terms": [],
+      "retrieved": [
+        {
+          "page": 2,
+          "score": 0.619
+        },
+        {
+          "page": 4,
+          "score": 0.509
+        },
+        {
+          "page": 3,
+          "score": 0.469
+        },
+        {
+          "page": 5,
+          "score": 0.439
+        },
+        {
+          "page": 1,
+          "score": 0.41
+        }
+      ]
+    },
+    {
+      "id": "f04",
+      "category": "T2",
+      "question": "校内志愿服务每次加几分，累计上限是多少？",
+      "expect_pages": [
+        "3"
+      ],
+      "abstain_case": false,
+      "top_score": 0.757,
+      "term_evidence": false,
+      "file_evidence": false,
+      "abstained": false,
+      "elapsed_ms": 530.0,
+      "rank": 0,
+      "mrr": 1.0,
+      "terms_ok": true,
+      "missing_terms": [],
+      "retrieved": [
+        {
+          "page": 3,
+          "score": 0.757
+        },
+        {
+          "page": 5,
+          "score": 0.49
+        },
+        {
+          "page": 1,
+          "score": 0.479
+        },
+        {
+          "page": 2,
+          "score": 0.427
+        },
+        {
+          "page": 4,
+          "score": 0.413
+        }
+      ]
+    },
+    {
+      "id": "f05",
+      "category": "T2",
+      "question": "寒暑假社会实践每次加几分，累计上限是多少？",
+      "expect_pages": [
+        "3"
+      ],
+      "abstain_case": false,
+      "top_score": 0.761,
+      "term_evidence": false,
+      "file_evidence": false,
+      "abstained": false,
+      "elapsed_ms": 557.5,
+      "rank": 0,
+      "mrr": 1.0,
+      "terms_ok": true,
+      "missing_terms": [],
+      "retrieved": [
+        {
+          "page": 3,
+          "score": 0.761
+        },
+        {
+          "page": 1,
+          "score": 0.476
+        },
+        {
+          "page": 5,
+          "score": 0.458
+        },
+        {
+          "page": 4,
+          "score": 0.429
+        },
+        {
+          "page": 2,
+          "score": 0.419
+        }
+      ]
+    },
+    {
+      "id": "f06",
+      "category": "T1",
+      "question": "理论考试90分以上加几分？缺考怎么处理？",
+      "expect_pages": [
+        "4"
+      ],
+      "abstain_case": false,
+      "top_score": 0.446,
+      "term_evidence": false,
+      "file_evidence": false,
+      "abstained": true,
+      "elapsed_ms": 527.5,
+      "rank": 4,
+      "mrr": 0.2,
+      "terms_ok": true,
+      "missing_terms": [],
+      "retrieved": [
+        {
+          "page": 3,
+          "score": 0.446
+        },
+        {
+          "page": 5,
+          "score": 0.431
+        },
+        {
+          "page": 2,
+          "score": 0.428
+        },
+        {
+          "page": 1,
+          "score": 0.41
+        },
+        {
+          "page": 4,
+          "score": -1.0
+        }
+      ]
+    },
+    {
+      "id": "f07",
+      "category": "T3",
+      "question": "表格里“优秀”对应多少分？",
+      "expect_pages": [
+        "4"
+      ],
+      "abstain_case": false,
+      "top_score": 0.508,
+      "term_evidence": false,
+      "file_evidence": false,
+      "abstained": false,
+      "elapsed_ms": 415.5,
+      "rank": 0,
+      "mrr": 1.0,
+      "terms_ok": true,
+      "missing_terms": [],
+      "retrieved": [
+        {
+          "page": 4,
+          "score": 0.508
+        },
+        {
+          "page": 1,
+          "score": 0.452
+        },
+        {
+          "page": 5,
+          "score": 0.443
+        },
+        {
+          "page": 3,
+          "score": 0.418
+        },
+        {
+          "page": 2,
+          "score": 0.383
+        }
+      ]
+    },
+    {
+      "id": "f08",
+      "category": "T1",
+      "question": "宿舍卫生不合格扣几分？弄虚作假会怎么处理？",
+      "expect_pages": [
+        "5"
+      ],
+      "abstain_case": false,
+      "top_score": 0.691,
+      "term_evidence": false,
+      "file_evidence": false,
+      "abstained": false,
+      "elapsed_ms": 442.4,
+      "rank": 0,
+      "mrr": 1.0,
+      "terms_ok": true,
+      "missing_terms": [],
+      "retrieved": [
+        {
+          "page": 5,
+          "score": 0.691
+        },
+        {
+          "page": 1,
+          "score": 0.467
+        },
+        {
+          "page": 3,
+          "score": 0.452
+        },
+        {
+          "page": 4,
+          "score": 0.442
+        },
+        {
+          "page": 2,
+          "score": 0.37
+        }
+      ]
+    },
+    {
+      "id": "f09",
+      "category": "T4",
+      "question": "学校食堂几点开门？",
+      "expect_pages": [],
+      "abstain_case": true,
+      "top_score": 0.363,
+      "term_evidence": false,
+      "file_evidence": false,
+      "abstained": true,
+      "elapsed_ms": 419.7,
+      "rank": null,
+      "mrr": 0.0,
+      "terms_ok": false,
+      "missing_terms": [],
+      "retrieved": [
+        {
+          "page": 3,
+          "score": 0.363
+        },
+        {
+          "page": 5,
+          "score": 0.353
+        },
+        {
+          "page": 1,
+          "score": 0.311
+        },
+        {
+          "page": 2,
+          "score": 0.301
+        },
+        {
+          "page": 4,
+          "score": 0.292
+        }
+      ]
+    }
+  ]
+}

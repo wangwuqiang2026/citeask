@@ -1,6 +1,6 @@
 # citeask Web UI（React SPA）
 
-M1/M2 阶段的新前端：React 18 + TypeScript + Vite 5 + Tailwind 3.4。构建产物输出到 **`web/dist`**
+M1–M4 阶段的新前端：React 18 + TypeScript + Vite 5 + Tailwind 3.4。构建产物输出到 **`web/dist`**
 （已入库），`app.py` 的 FastAPI 宿主优先加载它；旧 Gradio 界面保留在 `/legacy`，可随时回退。
 
 ## 1. 目录结构
@@ -41,7 +41,7 @@ $env:npm_config_cache = "D:\Code\VibeCoding\kotaemon\ktem_app_data\tmp\npm-cache
 npm install --ignore-scripts   # 沙箱里 npm 的 postinstall 会 spawn，见 §3
 npm run build                  # tsc -b + Vite → web/dist
 npm run preview                # 预览 web/dist（:4173）
-npm test                       # Node 内置测试（17 例）
+npm test                       # Node 内置测试（43 例）
 npm run typecheck              # tsc --noEmit
 npm run lint                   # ESLint（0 警告）
 npm run dev                    # 开发服务器 :5173（需普通环境，见 §3）
@@ -74,15 +74,15 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build_web.ps1 -CopyT
 
 ## 4. 产物与体积（实测）
 
-`npm run build`（2026-10-18，terser、无 sourcemap、无 CSS 压缩）：
+`npm run build`（2026-10-19，terser、无 sourcemap、无 CSS 压缩）：
 
 | 文件 | 原始 | gzip |
 |---|---|---|
-| `dist/assets/index-*.js`（全站单包：React/路由/Radix/markdown/文件页/设置页） | 886.63 kB | **264.19 kB** |
-| `dist/assets/index-*.css` | 43.94 kB | 9.64 kB |
+| `dist/assets/index-*.js`（全站单包：React/路由/Radix/markdown/文件页/设置页/资源页） | 920.83 kB | **272.11 kB** |
+| `dist/assets/index-*.css` | 44.99 kB | 9.87 kB |
 | `dist/index.html` | 1.29 kB | 0.67 kB |
 
-首屏 JS（单个入口包）**264.2 kB gzip**，低于 350 kB 预算；`dist/index.html` 引用哈希资源
+首屏 JS（单个入口包）**272.11 kB gzip**，低于 350 kB 预算；`dist/index.html` 引用哈希资源
 `/assets/index-<hash>.js|css`。
 
 ## 5. 部署与回滚
@@ -139,18 +139,21 @@ $env:VITE_USE_MOCK = "1"; npm run dev
 M2：`/files`（搜索、原生上传/URL、文件表与行操作、分块抽屉、分组 CRUD）与
 `/settings`（schema 驱动表单、分组导航、吸底保存与未保存提示）已替换占位页。
 
-M3：`/resources`（索引集合 / 模型资源只读视图 / 用户管理）与 `/help`（关于 + 使用指南）已是
-真页面，设置页顶部新增「账户」改密卡片；`ClassicPage` / `PageShell` 占位实现已删除。
+M3：`/resources`（索引集合 / 模型资源 / 用户管理）与 `/help`（关于 + 使用指南）已是真页面，
+设置页顶部新增「账户」改密卡片；`ClassicPage` / `PageShell` 占位实现已删除。
 
-仍未迁移：Gradio 的模型供应商编辑表单、索引新增/删除、MCP 配置（都在 `/legacy`，因为依赖重启
-或属于长表单），以及经典界面的登录页。
+M4：`/resources` 的 LLM / 向量 / 重排供应商与 MCP 配置均可增删改；表单由服务端
+`describe()["params"]` 生成，新增供应商不用改前端。删默认模型会提示回退，非管理员只读。
+
+仍不在新界面：索引的新增/删除（破坏性、需要重启）与经典登录页（仅作为 `/legacy` 回滚路径）。
 
 限制：
 
-1. 沙箱内无浏览器：交互与视觉只做代码级/接口级验证；`npm run dev` 的 HMR 需在普通环境确认。
-2. 入口为单个 JS 包（264.2 kB gzip）；后续页面迁移时再按路由拆分。
+1. 已用 agent-browser 在 1440×900 与 820×900 实测；`npm run dev` 的 HMR 仍建议在普通终端
+   （受限沙箱下 Vite 依赖预打包使用 esbuild，无法启动）。
+2. 入口为单个 JS 包（**272.11 kB gzip**，预算 350）；后续页面再加时按路由 `lazy()` 拆分。
 3. 首屏依赖 `/api/v1/meta` 与会话数据，接口慢时显示骨架屏。
-4. 沙箱禁止向新建子目录写文件（`mkdtemp` 后写入即 `Permission denied`），因此**原生上传**
-   在本会话只能验证到 403（环境限制）；上传/重建索引的接口逻辑由后端 17 个测试覆盖，
-   真实上传需在普通环境点一次。
-5. 设置页不处理用户密码（仍在 `/legacy` 的用户设置里）。
+4. 前端单测覆盖纯函数（SSE 解析、引用解析、上传/设置/重试等，43 例），组件与浏览器级
+   E2E 尚未做；接口契约由后端 57 例覆盖。
+5. PDF 预览复用 `/legacy/file=...`（浏览器内置阅读器），原生 PDF.js 阅读器尚未迁移。
+6. 演示截图与 GIF 见 `docs/images/`，用仓库自带的虚构 fixture 生成，不包含真实文件。

@@ -60,6 +60,10 @@ def meta(request: Request, user: dict = Depends(current_user)) -> dict:
 
     settings = app.default_settings
     use_mindmap = not config("USE_LOW_LLM_REQUESTS", default=False, cast=bool)
+    # The defaults the controls start on come from the account's saved settings,
+    # not from the application-wide ones: after picking another reasoning mode or
+    # citation style the page must render that choice on the next load.
+    values = SettingsService(app).load(user["id"])
 
     reasoning_choices = []
     for mode_id, reasoning_cls in reasonings.items():
@@ -94,6 +98,20 @@ def meta(request: Request, user: dict = Depends(current_user)) -> dict:
         except Exception:  # noqa: BLE001 - an empty pool has no default
             current_model = ""
 
+    default_reasoning = values.get("reasoning.use")
+    if default_reasoning is None:
+        default_reasoning = (
+            settings.reasoning.settings["use"].value
+            if "use" in settings.reasoning.settings
+            else (reasoning_choices[0]["value"] if reasoning_choices else "")
+        )
+    default_language = values.get("reasoning.lang")
+    if default_language is None:
+        default_language = lang_item.value if lang_item else "zh"
+    default_citation = values.get("reasoning.options.simple.highlight_citation")
+    if default_citation is None:
+        default_citation = citation_item.value if citation_item else "inline"
+
     return {
         "app": {
             "name": app.app_name,
@@ -113,18 +131,16 @@ def meta(request: Request, user: dict = Depends(current_user)) -> dict:
         "indices": _index_info(app),
         "reasoning": {
             "choices": reasoning_choices,
-            "default": settings.reasoning.settings["use"].value
-            if "use" in settings.reasoning.settings
-            else (reasoning_choices[0]["value"] if reasoning_choices else ""),
+            "default": default_reasoning,
         },
         "models": {"choices": models, "default": current_model},
         "languages": {
             "choices": _choices(lang_item) if lang_item else [],
-            "default": lang_item.value if lang_item else "zh",
+            "default": default_language,
         },
         "citations": {
             "choices": _choices(citation_item) if citation_item else [],
-            "default": citation_item.value if citation_item else "inline",
+            "default": default_citation,
         },
     }
 

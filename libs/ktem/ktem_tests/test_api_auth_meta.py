@@ -78,3 +78,35 @@ def test_settings_schema_and_round_trip(logged_in):
     assert logged_in.get("/api/v1/settings").json()["values"][key] == replacement
 
     logged_in.put("/api/v1/settings", json={"values": {key: original}})
+
+
+def test_meta_defaults_follow_the_account_settings(logged_in):
+    """The rendered controls must start on what this account actually uses.
+
+    ``/meta`` used to report the application-wide defaults, so a user who picked
+    another reasoning mode saw the old one selected after a reload.
+    """
+    meta = logged_in.get("/api/v1/meta").json()
+    current = meta["reasoning"]["default"]
+    alternatives = [
+        item["value"]
+        for item in meta["reasoning"]["choices"]
+        if item["value"] != current
+    ]
+    assert alternatives, "more than one reasoning mode must be registered"
+    replacement = alternatives[0]
+
+    original = logged_in.get("/api/v1/settings").json()["values"]["reasoning.use"]
+    try:
+        saved = logged_in.put(
+            "/api/v1/settings", json={"values": {"reasoning.use": replacement}}
+        )
+        assert saved.status_code == 200, saved.text
+
+        updated = logged_in.get("/api/v1/meta").json()
+        assert updated["reasoning"]["default"] == replacement
+    finally:
+        logged_in.put("/api/v1/settings", json={"values": {"reasoning.use": original}})
+
+    restored = logged_in.get("/api/v1/meta").json()
+    assert restored["reasoning"]["default"] == original

@@ -131,6 +131,7 @@ class ConversationService:
         row = self._row(conv_id)
         if not self._can_read(row, user):
             raise PermissionError("无权访问该会话")
+        owner = self._is_owner(row, user)
         data = deepcopy(row.data_source or {})
 
         messages = _flatten_messages(data)
@@ -142,6 +143,15 @@ class ConversationService:
         evidence_history = list(evidence_history[:pair_count])
         while len(evidence_history) < pair_count:
             evidence_history.append([])
+        if not owner:
+            # A public conversation is readable by others, but the local storage
+            # path is not part of what they may see. Only the owner needs it.
+            for slot in evidence_history:
+                if not isinstance(slot, list):
+                    continue
+                for item in slot:
+                    if isinstance(item, dict):
+                        item.pop("file_path", None)
 
         mindmap_history = data.get("mindmap_history")
         if not isinstance(mindmap_history, list):
@@ -227,8 +237,8 @@ class ConversationService:
         self, conv_id: str, user: dict, *, message_index: int, liked: bool, value: str
     ) -> None:
         row = self._row(conv_id)
-        if not self._can_read(row, user):
-            raise PermissionError("无权访问该会话")
+        if not self._is_owner(row, user):
+            raise PermissionError("只有会话所有者可以反馈")
         with Session(engine) as session:
             stored = session.exec(
                 select(Conversation).where(Conversation.id == conv_id)

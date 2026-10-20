@@ -217,6 +217,8 @@ def set_current_embedding(
 
     # A model can be "in use" and still need a retry: the last rebuild may have
     # failed for some files (§5.36), so only a clean job counts as a no-op.
+    # Skipped sources (web links) do not dirty the job: they can never be
+    # rebuilt, so counting them would start a fresh rebuild forever.
     job = reindex_job.snapshot()
     clean = job["state"] in ("idle", "done") and not job["failed"]
     if (

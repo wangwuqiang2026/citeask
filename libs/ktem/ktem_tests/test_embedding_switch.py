@@ -72,19 +72,25 @@ class FakeEmbeddingManager:
     def __init__(self, names=("old", "new")):
         self.names = list(names)
         self.updates: list[tuple] = []
+        self._default = self.names[0] if self.names else ""
 
     def info(self):
         return {
             name: {
                 "name": name,
                 "spec": {"__type__": "kotaemon.embeddings.OpenAIEmbeddings"},
-                "default": name == self.names[0],
+                "default": name == self._default,
             }
             for name in self.names
         }
 
+    def options(self):
+        return {name: object() for name in self.names}
+
     def update(self, name, spec, default, new_name=""):
         self.updates.append((name, spec, default))
+        if default:
+            self._default = name
 
 
 class FakeApp:
@@ -148,7 +154,7 @@ def test_switch_updates_configs_drops_stores_and_reindexes_every_file(
             pipeline.calls[0][2]["keep_on_failure"] is True
         ), "a failed reindex must keep the row and the upload it created"
         assert pipeline.user_id == 7, "each file is re-indexed for its owner"
-    assert result == {"total": 2, "done": 2, "failed": 0}
+    assert result == {"total": 2, "done": 2, "failed": 0, "skipped": 0}
     assert reports[0]["state"] == "running"
     assert reports[0]["total"] == 2
     assert reports[-1]["done"] == 2
@@ -160,7 +166,7 @@ def test_a_file_that_fails_does_not_stop_the_rebuild(fake_environment):
 
     result = rebuild_all(env.app, "new", lambda **changes: None)
 
-    assert result == {"total": 2, "done": 1, "failed": 1}
+    assert result == {"total": 2, "done": 1, "failed": 1, "skipped": 0}
 
 
 def test_a_stored_file_that_is_gone_is_counted_as_failed(fake_environment, tmp_path):
@@ -179,7 +185,7 @@ def test_a_stored_file_that_is_gone_is_counted_as_failed(fake_environment, tmp_p
     finally:
         reindex_module.stored_sources = original  # type: ignore[assignment]
 
-    assert result == {"total": 2, "done": 1, "failed": 1}
+    assert result == {"total": 2, "done": 1, "failed": 1, "skipped": 0}
 
 
 def test_a_failed_file_keeps_its_uploaded_bytes(fake_environment):
@@ -208,7 +214,7 @@ def test_a_failed_file_keeps_its_uploaded_bytes(fake_environment):
     finally:
         reindex_module.stored_sources = original  # type: ignore[assignment]
 
-    assert result == {"total": 2, "done": 1, "failed": 1}
+    assert result == {"total": 2, "done": 1, "failed": 1, "skipped": 0}
     assert seen[0].exists(), "the upload is restored from the scratch copy"
 
 
@@ -427,6 +433,57 @@ def test_switching_the_embedding_starts_a_rebuild(logged_in, monkeypatch):
     finally:
         releases.set()
         assert logged_in.delete(f"/api/v1/vendors/embeddings/{name}").status_code == 204
+
+
+def test_a_url_source_is_skipped_and_the_switch_then_becomes_a_noop(
+    logged_in, monkeypatch, fake_environment, tmp_path
+):
+    """A web link cannot be re-parsed with the new model: skip it, don't fail it.
+
+    Counting the link as failed kept the finished job dirty, so switching to the
+    same model again started another full rebuild every time; ``skipped`` is
+    informational and must not affect the no-op decision.
+    """
+    from ktem.api import resources as resources_module
+
+    uploaded = tmp_path / "制度.pdf"
+    uploaded.write_bytes(b"%PDF-1.4 fake")
+    sources = [
+        {
+            "id": "url-1",
+            "name": "https://example.com/制度",
+            "path": tmp_path / "url",
+            "user": 7,
+        },
+        {"id": "file-1", "name": "制度.pdf", "path": uploaded, "user": 7},
+    ]
+    monkeypatch.setattr(reindex_module, "stored_sources", lambda index: sources)
+
+    single = FakeApp([FakeIndex(1)])
+    job = ReindexJob(
+        rebuild=lambda app, name, report: rebuild_all(single, name, report)
+    )
+    monkeypatch.setattr(resources_module, "reindex_job", job)
+
+    try:
+        response = logged_in.put("/api/v1/resources/embedding", json={"name": "new"})
+        assert response.status_code == 200, response.text
+        assert response.json()["started"] is True
+
+        state = _wait_for(job, "done")
+        assert state["failed"] == 0, state
+        assert state["skipped"] == 1, state
+        assert state["done"] == 1, state
+        assert state["total"] == 2, state
+        assert state["message"]
+
+        again = logged_in.put("/api/v1/resources/embedding", json={"name": "new"})
+        assert again.status_code == 200, again.text
+        assert again.json()["started"] is False
+    finally:
+        deadline = time.time() + 5
+        while job.snapshot()["state"] == "running" and time.time() < deadline:
+            time.sleep(0.01)
 
 
 def test_switching_the_reranker_moves_the_default(logged_in):

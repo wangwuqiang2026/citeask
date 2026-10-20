@@ -103,18 +103,20 @@ def reindex_index(
     report: Progress,
     base: dict | None = None,
 ) -> tuple:
-    """Re-index every file of one index; returns ``(done, failed)``.
+    """Re-index every file of one index; returns ``(done, failed, skipped)``.
 
     ``base`` carries the counters of the indices already rebuilt, so the caller
-    can report one continuous progress line.
+    can report one continuous progress line. A web link has no stored bytes to
+    re-parse, so it is counted as skipped rather than failed (§5.36).
     """
-    done = failed = 0
-    already = dict(base or {"done": 0, "failed": 0})
+    done = failed = skipped = 0
+    already = dict(base or {"done": 0, "failed": 0, "skipped": 0})
 
     def progress(**changes) -> None:
         report(
             done=already["done"] + done,
             failed=already["failed"] + failed,
+            skipped=already["skipped"] + skipped,
             embedding=embedding_name,
             **changes,
         )
@@ -123,7 +125,7 @@ def reindex_index(
     try:
         for source in stored_sources(index):
             if _is_url(source["name"]):
-                failed += 1
+                skipped += 1
                 progress(message=f"跳过 {source['name']}：网页链接无法用新模型重建")
                 continue
 
@@ -169,13 +171,14 @@ def reindex_index(
             progress()
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
-    return done, failed
+    return done, failed, skipped
 
 
 def rebuild_all(app, embedding_name: str, report: Progress) -> dict:
     """Point every index at ``embedding_name`` and rebuild it.
 
-    Returns ``{"total", "done", "failed"}``; the caller owns the job state.
+    Returns ``{"total", "done", "failed", "skipped"}``; the caller owns the job
+    state. ``skipped`` counts web links, which cannot be rebuilt.
     """
     from ktem.embeddings.manager import embedding_models_manager
 
@@ -191,6 +194,7 @@ def rebuild_all(app, embedding_name: str, report: Progress) -> dict:
         total=total,
         done=0,
         failed=0,
+        skipped=0,
         message=f"正在用 {embedding_name} 重建索引",
     )
 
@@ -200,22 +204,23 @@ def rebuild_all(app, embedding_name: str, report: Progress) -> dict:
     embedding_models_manager.update(embedding_name, spec=spec, default=True)
 
     settings = app.default_settings.flatten()
-    done = failed = 0
+    done = failed = skipped = 0
     for index in indices:
         config = dict(index.config or {})
         config["embedding"] = embedding_name
         manager.update_index(index.id, index.name, config)
         drop_stores(index)
-        file_done, file_failed = reindex_index(
+        file_done, file_failed, file_skipped = reindex_index(
             index,
             embedding_name,
             settings,
             report,
-            base={"done": done, "failed": failed},
+            base={"done": done, "failed": failed, "skipped": skipped},
         )
         done += file_done
         failed += file_failed
-    return {"total": total, "done": done, "failed": failed}
+        skipped += file_skipped
+    return {"total": total, "done": done, "failed": failed, "skipped": skipped}
 
 
 class ReindexJob:
@@ -230,6 +235,7 @@ class ReindexJob:
             "total": 0,
             "done": 0,
             "failed": 0,
+            "skipped": 0,
             "message": "",
         }
 
@@ -247,6 +253,7 @@ class ReindexJob:
                 "total": 0,
                 "done": 0,
                 "failed": 0,
+                "skipped": 0,
                 "message": "正在准备重建索引",
             }
         threading.Thread(
@@ -270,16 +277,21 @@ class ReindexJob:
 
         done = int(result.get("done", 0))
         failed = int(result.get("failed", 0))
+        skipped = int(result.get("skipped", 0))
         message = f"索引已用 {embedding_name} 重建完成（{done}/{result.get('total', done)} 个文件）"
         if failed:
+            message += f"；失败 {failed} 个文件"
+        if skipped:
+            message += f"；跳过 {skipped} 个网页链接"
+        if failed or skipped:
             detail = self.snapshot()["message"]
-            message += f"，{failed} 个文件失败"
             if "失败" in detail or "跳过" in detail:
                 message += f"（{detail}）"
         report(
             state="done",
             done=done,
             failed=failed,
+            skipped=skipped,
             total=result.get("total", done),
             message=message,
         )

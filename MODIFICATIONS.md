@@ -2441,3 +2441,308 @@ SSE 事件：`start`（可带 `warning`）→ `token`/`reset` → `evidence`（�
 | 前端单测 | 新增 2 例（anchor 还原、普通链接不受影响），`npm test` **43 passed**；typecheck / lint 干净 |
 | 浏览器 | 「引用：内联」提问「英语四级和六级分别加几分？」→ 答案显示上标 `1`，证据面板显示「已被引用」、第 2 页 36% |
 | 回归 | 默认「无引用」、经典 Gradio 界面与既有证据联动均不受影响 |
+
+### 5.31 标签页标题被对话名覆盖（2026-10-19）
+
+**现象**：新开对话并提问后，浏览器标签页标题从 `citeask` 变成
+「<自动生成的对话名> · citeask」（如「王务强班级查询 · citeask」）；换一个对话就换一次名字，
+多开标签时反而看不出这是哪个产品。
+
+**根因**：[ChatPage.tsx](web/src/pages/ChatPage.tsx) 里有一个 `useEffect` 把
+`document.title` 写成 `` `${name} · citeask` ``，而 `name = stream.title ?? conversation?.name ?? "新对话"`：
+[use-chat-stream.ts](web/src/hooks/use-chat-stream.ts) 在 SSE 的 `title` / `done` 事件里
+`setTitle(name)`，因此首轮回答一生成标题，标签页就跟着变。
+
+**修复**：删掉这个 effect，标签页标题回到由构建入口 [index.html](web/index.html) 的
+`<title>citeask</title>` 决定、全程不再变化；对话名仍只出现在页面内标题栏（可点击重命名）
+与侧边栏，交互不变。`web/dist` 按惯例一并重建入库（旧 hash 资源被清理）。
+
+**验证**
+
+| 项目 | 结果 |
+|---|---|
+| 构建 | `npm run build` 通过；`web/dist/index.html` 仍是 `<title>citeask</title>`，新 bundle `index-DXOQKAKD.js` 中 `document.title` 出现 **0** 次 |
+| 静态检查/单测 | `tsc -b`、`npm run lint` 干净；`npm test` **43 passed** |
+| 运行中的服务 | 无需重启：`GET /` 与 `GET /chat/<id>` 均返回新入口和新 bundle，刷新后标签页保持 `citeask` |
+
+### 5.32 证据面板：0% 却被引用、无关候选太多（2026-10-19）
+
+**现象**：问「王务强是哪个班的」，证据面板 13 条、其中 4 条标「已被引用」，但这些卡片的
+「相关性」显示 **0%**；同时列表里混着 Mathorcup 校赛名单这类与问题无关的文件。
+
+**定位**（直接读 `ktem_app_data/user_data/sql.db` 里该会话的 `evidence_history`）：
+
+- 13 条 = `num_retrieval` 10 + 实体行提升 3；**13 条的 `rerank_score` 全是 0.0**；
+- 被引用的 4 条都来自《社会实践完成情况表》；未引用的 9 条里 5 条是 Mathorcup PDF、4 条是综测表；
+- 实体行提升的 3 条 `vector_score = -1.0`（`NO_SIMILARITY`），**没有任何 rerank 元数据**。
+
+三个独立原因叠在一起：
+
+1. 界面上的「相关性」是本地词法重排器的**字面 bigram 覆盖率**（[local_lexical.py](libs/kotaemon/kotaemon/rerankings/local_lexical.py)），
+   不是语义相关度。表格行与口语问句天然不重合，0 分是重排器的真实结论，不等于「无关」。
+2. [structured_evidence](libs/ktem/ktem/reasoning/simple.py) 用 `reranking_score_of()` 写
+   `rerank_score`，而该函数**没有分数时也返回 0.0**；实体行是
+   [`_entity_row_docs`](libs/ktem/ktem/index/file/pipelines.py) 在重排**之后**直接提升的，从未被打分——
+   于是「没打分」被写成了「0 分」，最该显示命中关系的证据反而显示 0%。
+3. `cited` 是另一条链路：[match_evidence_with_context](libs/kotaemon/kotaemon/indices/qa/citation_qa.py)
+   用 `find_text`（SequenceMatcher，阈值仅 35%）把答案的引用片段模糊匹配回块，和字面分无关，
+   所以「0% + 已被引用」并不矛盾（实测一条 18 字符的边界前缀匹配也会把块标成被引用）。
+
+无关候选另有来源：检索刻意宁多勿漏——`_fill_absent_sources` 给每个文件补槽、本地重排器
+`min_coverage=0` 只排序不过滤，面板又把全部候选都列出来。
+
+**实现**
+
+- 后端（[pipelines.py](libs/ktem/ktem/index/file/pipelines.py)、[simple.py](libs/ktem/ktem/reasoning/simple.py)）：
+  - 实体行提升时在 metadata 打 `entity_row=True`；
+  - 证据载荷的 `rerank_score` 在**没有重排分时发 `null`**（0.0 只代表重排器给了 0 分），并新增
+    `entity_row` 字段；`score` 语义与排序不变，经典 Gradio 面板不受影响。
+- 前端（[EvidenceDrawer.tsx](web/src/components/chat/EvidenceDrawer.tsx)、
+  [utils.ts](web/src/lib/utils.ts)、[i18n.ts](web/src/lib/i18n.ts)）：
+  - 默认只列**相关证据** = `cited` 或 `entity_row`（旧会话没有该字段时退化为 `vector_score === -1`），
+    头部显示「相关 N / 共 M 条」，可切「显示全部」；
+  - 相关视图不再显示字面匹配度；全部视图里 0 分显示「无字面匹配」而不是 0%，实体行显示「实体行命中」；
+  - 被点击的引用 chip 目标即使被过滤也强制保留，定位不失效；
+  - 引用关闭/拒答导致没有相关证据时，自动回退为显示全部候选，拒答仍可解释；
+  - 页脚提示改为「{cited} 条被引用 · 共 {n} 条候选」。
+
+**实测**（同一会话）
+
+| 口径 | 改前 | 改后 |
+|---|---|---|
+| 面板默认条数 | 13（全部） | **6 条相关**（4 条被引用 + 3 条实体行，去重后 6） |
+| 被引用卡片的相关性 | 3 条显示 0% | 相关视图不显示字面分，改为「已被引用」/「实体行命中」 |
+| 无关候选（Mathorcup 5 条） | 默认可见 | 默认隐藏，切「显示全部 13 条」可查 |
+| 载荷 | `rerank_score` 恒 0.0，无法区分 | 实体行 `rerank_score=null` + `entity_row=true` |
+| 正文页脚 | 「13 条证据 · 4 条被引用」 | 「4 条被引用 · 共 13 条候选」 |
+
+**测试**：`test_evidence_channel.py` +1 例（实体行有标记、无分数发 `null`；重排器 0.0 仍是 0.0），
+相关后端套件 **42 passed**；前端 `npm test` **48 passed**（新增 5 例 `isRelevantEvidence`），
+typecheck / lint 干净；`web/dist` 已重建（`index-DrNIvyl_.js`）。
+
+### 5.33 模型资源页的「默认」不是用户正在用的模型（2026-10-19）
+
+**现象**：资源页的对话模型列表里 `deepseek` 标着「默认」，但聊天页的模型显示是写死的「默认模型」；
+用户到底在用哪个模型取决于「设置」页里 per-user 的 `reasoning.options.simple.llm`（空则回落全局默认），
+而这个选择在资源页、聊天页都看不见，也不能在资源页切换。
+
+**定位**
+
+1. [meta.py](libs/ktem/ktem/api/meta.py) 把 `models.default` **写死成 `""`**，前端于是只能显示
+   [i18n.ts](web/src/lib/i18n.ts) 的「默认模型」占位串，而不是实际模型名。
+2. [chat-settings.ts](web/src/stores/chat-settings.ts) 的 `hydrate` 也是 `llm: state.llm ?? ""`：
+   模型选择只存在浏览器 localStorage，账号层面没有这个值；换设备/换浏览器就不同步。
+3. [resources.py](libs/ktem/ktem/api/resources.py) 只读全局模型池与数据库默认（`default` 徽标），
+   既不读用户选择，也没有切换入口；[ResourcesPage.tsx](web/src/pages/ResourcesPage.tsx) 只能增删改资源。
+
+**实现**
+
+- 后端
+  - [settings.py](libs/ktem/ktem/services/settings.py) 新增 `llm_setting_keys()` / `current_llm()`：
+    按 `reasoning.use` 找当前推理模式的模型槽位——`simple`/`complex`/`ReAct` 是 `llm`，
+    `ReWOO` 是 `planner_llm` + `solver_llm`，两者一起写才能生效。
+  - [meta.py](libs/ktem/ktem/api/meta.py)：`models.default` 改为**账号实际生效的模型名**
+    （用户设置优先，模型被删则回落模型池默认），不再是 `""`。
+  - [resources.py](libs/ktem/ktem/api/resources.py)：新增 `PUT /api/v1/resources/llm`
+    （body `{"name": "..."}`），校验模型池后写入账号当前推理模式的槽位；空名表示清除覆盖、
+    回退全局默认；返回实际生效的模型名。任何登录用户只能改自己的设置。
+- 前端
+  - 资源页 LLM 列表：当前模型行打「使用中」徽标，其余行提供「使用此模型」按钮；
+    切换后写账号、同步聊天 store、刷新 `resources`/`meta`（[ResourcesPage.tsx](web/src/pages/ResourcesPage.tsx)）。
+  - 聊天设置：模型下拉不再列出「(默认)」占位项，选中后调用同一接口持久化到账号；
+    [chat-settings.ts](web/src/stores/chat-settings.ts) 从 `meta.models.default` 水合，不再依赖
+    localStorage 里的空串（[ChatSettingsDialog.tsx](web/src/components/chat/ChatSettingsDialog.tsx)）。
+  - 文案：新增「使用中 / 使用此模型 / 已切换为 {name}」；聊天设置说明改为
+    「模型选择保存在账号，其余设置保存在本机」。
+
+**验证**
+
+| 项目 | 结果 |
+|---|---|
+| 后端单测 | 新增 `test_current_llm_follows_the_account_choice`（切换、非法模型 400、清空回退、恢复账号设置）+ meta 断言；全套 **401 passed** |
+| 前端 | `npm test` **48 passed**、`tsc --noEmit` / `eslint` 干净；`npm run build` 通过（`index-Wc-T7gT3.js`，272.91 kB gzip） |
+| 实机（重启后端后） | `meta.models.default`：`""` → **`deepseek`**；`PUT /resources/llm {"name":"openai"}` → meta 变 `openai`、设置落库；非法模型 **400**；`{"name":""}` → 回落 `deepseek`；`/chat/747e…` 返回新 bundle |
+
+**边界**
+
+- 全局默认仍保留：新用户或清除选择时使用；「默认」与「使用中」可以同时出现在同一行（管理员视角）。
+- 切换写的是**账号默认推理方式**的槽位。如果用户只在聊天设置里临时切换推理方式（聊天侧 override），
+  资源页仍展示账号默认推理方式下的模型；要彻底统一需把推理方式也持久化到账号，留作后续。
+
+**注意**：本节改动了 Python 路由与 `/meta`，必须重启后端才生效（已重启，pid 9660；
+`.venv` + `KH_OPEN_BROWSER_ON_START=0` 启动，未额外打开浏览器）。
+
+### 5.34 模型资源页列的是内置模板，不是用户添加的模型（2026-10-20）
+
+**现象**：资源 → 模型资源里对话模型有 7 条，只有 `deepseek` 的 key 来自 `.env`，
+`claude`/`cohere`/`google`/`groq`/`mistral`/`openai` 的 `api_key` 仍是
+`your-key`/`<YOUR_OPENAI_KEY>` 占位符——用户从没添加过它们，页面却把它们当已配置模型列出来。
+
+**定位**：[llms/manager.py](libs/ktem/ktem/llms/manager.py) 的 `__init__` 会把
+`flowsettings.KH_LLMS` 里**所有**厂商模板写进 `llm_table`（每次启动补缺失），页面直接读数据库；
+模板里的占位凭据也一起入库。上游的 "开箱即用" 假设与"只显示用户自己的模型"冲突。
+
+**实现**
+
+- 新增 [model_presets.py](libs/ktem/ktem/utils/model_presets.py)：
+  - `is_configured(spec)`：用 vendor 的 `describe()` 找 required 的 secret 参数，值为空或
+    `your-key`/`<YOUR…>`/unset 哨兵即未配置；没有 required secret 的本地模型（如
+    `LocalLexicalReranker`、`FastEmbedEmbeddings`）视为已配置；无法加载的 vendor 视为未配置。
+  - `sync_presets(table, presets)`：已配置的内置项缺失时补种；**spec 与内置模板完全一致且
+    未配置**的库存行删除；用户改过 spec 的行一律保留；幂等。
+- [llms/manager.py](libs/ktem/ktem/llms/manager.py)：用 `sync_presets` 替换原来的盲目播种，
+  只作用于 LLM 表。占位模板不再写入，删掉后也不会在重启时复活。
+- [chat.py](libs/ktem/ktem/services/chat.py)：模型池为空时（新库 + 没有任何 key）不再抛出上游的
+  `No models in pool`，改为「尚未配置对话模型：请到「资源 → 模型资源」添加一个模型」。
+- 前端 [VendorDialog.tsx](web/src/components/resources/VendorDialog.tsx)：添加对话框里显示
+  「支持的模型：ChatOpenAI（gpt-4o-mini）· LCAnthropicChat（claude-3-5-sonnet-20240620）…」，
+  数据来自 `/vendors/catalog`；资源列表本身只显示已添加的模型。
+  [i18n.ts](web/src/lib/i18n.ts) 的 modelsHint 改为「列表只显示已添加的模型；点 + 从支持的模型里添加」。
+
+**范围（当时刻意没做）**：向量模型 / 重排模型两个池保持原样。它们的默认项是应用运行所需的
+embedding/reranker（清掉会失去默认模型），且本次要求是对话模型列表这 6 条占位项。向量池随后
+在 §5.35 按同一规则跟进；重排池仍保持原样（它的默认项 `cohere` 虽无 key，但检索侧有本地
+词法重排回退，见 §5.9）。两个池的「切换」按钮在 §5.36 补上。
+
+**实测**
+
+| 项目 | 结果 |
+|---|---|
+| 清理前 | `llm_table` 7 行：6 条占位模板 + `deepseek`（real key） |
+| 清理后 | `llm_table` 仅 `deepseek`；`/api/v1/resources` 的 `llms` 只剩它；`meta.models.default = deepseek` |
+| 保留 | 向量模型 6 条、重排模型 1 条未动；用户/文件/会话数据未动 |
+| 回滚 | 清理前已把 `sql.db` 复制到 `%TEMP%\dsh-citeask-db-backup\sql.db.20261020-000751.bak`（SHA-256 校验一致、`integrity_check: ok`）；占位行无用户数据，需要时可从 `flowsettings.KH_LLMS` 重建 |
+
+**测试**
+
+| 项目 | 结果 |
+|---|---|
+| 新增单测 | `test_model_presets.py` 6 例（占位/真实 key、无 secret 本地模型、未知 vendor、清理并保留用户改动、幂等） |
+| 空池 | 新增 chat 空池提示 1 例；meta 断言兼容空池；资源切换测试在空池时临时建 2 个模型再清理 |
+| 全套 | **408 passed**；另用 `KH_APP_DATA_DIR=flow_tmp/empty-pool-check` + 占位 key 模拟干净安装，API 子集 **15 passed** |
+| 前端 | `npm test` **48 passed**、typecheck / lint 干净；`npm run build` 通过（`index-BSM1XMOF.js`，273.16 kB gzip） |
+| 实机 | 重启后端后 `/resources` 只剩 `deepseek`；`/meta.models.choices = ["", "deepseek"]`；`/chat/<id>` 返回新 bundle |
+
+**注意**：模型池只在进程启动时同步，改动后需要重启后端（已重启，pid 27372，`.venv` 启动、
+`KH_OPEN_BROWSER_ON_START=0`）。清理发生在测试/重启时自动执行的 `sync_presets` 里；上面的备份是
+清理后的库，只用于回滚「改动后的状态」，不包含被删的占位模板（它们可随时从 `flowsettings` 重建）。
+
+### 5.35 向量模型池同样列着内置模板，且看不出哪个在用（2026-10-20）
+
+**现象**：资源 → 模型资源的向量模型有 5 条（`cohere`/`dashscope`/`fast_embed`/`google`/`openai`），
+其中 `openai`/`cohere`/`google` 的凭据仍是占位符；页面上只有「默认」徽标，没有像对话模型那样的
+「使用中」——看不出索引实际用的是哪一个。
+
+**定位**：[embeddings/manager.py](libs/ktem/ktem/embeddings/manager.py) 的 `__init__` 仍是
+「表为空才播种」：只要 `embedding` 表非空，`flowsettings.KH_EMBEDDINGS` 的模板就不会被清理，
+所以 §5.34 只处理了 LLM 表，向量表 5 条模板原样留下。索引侧
+[ktem__index.config](libs/ktem/ktem/index/file/index.py) 存的是池别名 `"embedding": "default"`，
+页面没有把它解析成具体模型名（真正生效的位置是
+[pipelines.py](libs/ktem/ktem/index/file/pipelines.py) 的
+`embedding_models_manager[index_settings.get("embedding", …)]`）。
+
+**实现**
+
+- [embeddings/manager.py](libs/ktem/ktem/embeddings/manager.py)：与
+  [llms/manager.py](libs/ktem/ktem/llms/manager.py) 一样改用
+  `sync_presets(EmbeddingTable, flowsettings.KH_EMBEDDINGS)`：已配置的内置项缺了补种，
+  spec 与内置模板完全一致且未配置的行删除，用户改过 spec 的行保留；有变化时打印
+  `embedding presets: seeded=… pruned=…`。
+- [resources.py](libs/ktem/ktem/api/resources.py)：新增 `_embedding_in_use(app)`，把每个索引
+  `config["embedding"]` 的 `"default"` 别名解析为池默认模型（`_default`），给向量行加
+  `in_use: bool`；`llms`/`rerankings` 的返回结构不变。
+- 前端 [types.ts](web/src/lib/types.ts) 的 `ModelResource` 增加可选 `in_use`；
+  [ResourcesPage.tsx](web/src/pages/ResourcesPage.tsx) 的 `PoolRow` 支持 `in_use`，有该字段时
+  以它为准显示「使用中」徽标（对话模型仍按 `meta.models.default` 判断），并在向量池上方显示一行
+  说明；[i18n.ts](web/src/lib/i18n.ts) 新增 `resources.embeddingsHint`（中英各一条）。
+
+**范围（当时刻意没做）**：向量模型**不提供「使用此模型」切换**。已建索引的向量是旧模型生成的，
+换模型后维度与语义都对不上，检索会错——要换必须重建索引，这属于经典界面的索引管理，不应在
+资源页悄悄改。因此这里只做「只显示可用的 + 标记实际在用的」。重排模型池本次仍未动。
+（这个限制在 §5.36 解除：切换按钮 + 后台自动全量重建索引。）
+
+**实测**
+
+| 项目 | 结果 |
+|---|---|
+| 清理前 | `embedding` 5 行：`openai`/`cohere`/`google`（占位 key）、`fast_embed`（本地）、`dashscope`（真实 key，默认） |
+| 清理后 | 仅 `dashscope`（default=1）与 `fast_embed`（default=0）；`/api/v1/resources` 的 `embeddings` 两行，`dashscope.in_use = true`、`fast_embed.in_use = false` |
+| 索引 | `ktem__index.config["embedding"] = "default"` 未改，解析为池默认 `dashscope` |
+| 回滚 | 清理前备份 `%TEMP%\dsh-embed-check\sql.db.before-embedding.bak`（6,950,912 字节，SHA-256 `ABCE73D6…9BE1` 与源一致，`integrity_check: ok`） |
+
+**测试**
+
+| 项目 | 结果 |
+|---|---|
+| 新增单测 | `test_model_presets.py` +2：向量表按同一规则清理/保留；`EmbeddingManager` 启动时必须调用 `sync_presets`（防退回「空表才播种」）。`test_api_help_resources.py` +1：`in_use` 唯一且等于池默认（`"default"` 别名解析），并断言各池字段形状 |
+| 全套 | **411 passed** |
+| 前端 | `npm test` **48 passed**、typecheck / lint 干净；`npm run build` 通过（`index-DJ2qgQ47.js`，273.35 kB gzip） |
+| 实机 | 重启后端后 `/api/v1/resources.embeddings` 两行，`dashscope.in_use = true`、`fast_embed.in_use = false`；`/` 返回的构建产物为 `index-DJ2qgQ47.js`（含 `in_use` 与「使用中」文案） |
+
+**注意**：与 §5.34 一样，池只在进程启动时同步，改动后需要重启后端。删除的三行是内置模板
+（可从 `flowsettings.KH_EMBEDDINGS` 原样重建），不含用户数据。
+
+### 5.36 模型资源页只能切对话模型，向量/重排模型无法切换（2026-10-20）
+
+**现象**：资源 → 模型资源里，对话模型有「使用此模型」，向量模型只有「使用中」、没有切换入口，
+重排模型同样。用户看得到另一个可用模型，却点不动。
+
+**定位**：
+- 对话模型的切换在 §5.33 写进账号设置（`Settings` 表），所以只改一个账号；向量/重排是全局
+  模型池的 `default` 标记，`EmbeddingManager.update` / `RerankingManager.update` 只被经典界面的
+  Gradio 回调调用，Web API 没有写入入口。
+- 向量模型不能像对话模型那样「切了就用」：检索时 embedding 取自
+  `ktem__index.config["embedding"]`（本库是池别名 `"default"`），而向量库里存的是旧模型算出来的
+  坐标（dashscope `text-embedding-v3` 1024 维 vs 本地 `fast_embed` mpnet 768 维），换模型必须
+  **清空向量库/文档库并用新模型重嵌入全部文件**。重排模型只在查询期使用，切换不需要重建。
+
+**实现**
+
+- 新增 [services/reindex.py](libs/ktem/ktem/services/reindex.py)：`stored_sources`（每个索引的
+  文件与属主）、`drop_stores`（丢两个库 + 清 chunk 关系 + 挂新空库）、`reindex_index`（逐文件
+  复制到临时目录、用新 embedding 重解析重嵌入）、`rebuild_all`（先移池默认、再写每个索引
+  `config["embedding"]`、然后逐索引重建）、`ReindexJob` + 单例 `reindex_job`（后台线程、状态
+  `idle/running/done/error` 与 `total/done/failed/message`）。
+- [resources.py](libs/ktem/ktem/api/resources.py)：
+  - `PUT /resources/embedding`（管理员）：启动后台重建；运行中再点返回 409；模型已在用且上一次
+    任务干净、索引不空时返回 `started: false`（no-op）。
+  - `GET /resources/embedding/job`：页面轮询进度。
+  - `PUT /resources/reranking`（管理员）：移动池默认（并更新显式 config 覆盖），即时生效。
+  - `embeddings` / `rerankings` 行新增 `in_use`（`_model_in_use` 解析 `"default"` 别名）。
+  - `_dry_index`：重建中断会留下「有文件、无 chunk」的索引，这种状态必须允许重试，不能判 no-op。
+- 前端 [ResourcesPage.tsx](web/src/pages/ResourcesPage.tsx)：两个池都有「使用此模型」。向量池先弹
+  确认框（说明会用新模型重建 N 个文件、期间检索可能为空），确认后轮询任务并显示
+  `正在用 X 重建索引 done/total`；失败或部分失败显示「重试重建」。重建期间禁用添加/切换。
+  [api.ts](web/src/lib/api.ts)、[types.ts](web/src/lib/types.ts)、[query.ts](web/src/lib/query.ts)、
+  [i18n.ts](web/src/lib/i18n.ts) 同步更新。
+
+**安全（踩过的坑，重要）**：上游的重建路径 `stream(reindex=True)` 会**先删除** Source 行和已存
+上传，再重新落盘；默认失败清理（`_handle_failed_indexing`）又会把这个新行连同文件删掉。第一次
+冒烟测试就撞上了：LanceDB 写 FTS 临时文件时被当前沙箱拒绝（`%TEMP%` 不可写，
+`PermissionDenied ... \.tmpmzYkGi`），7 个文件全部失败，连带 7 份已存上传被删。处置：
+
+- 改为 `keep_on_failure=True`：失败时保留本次创建的行与文件，只清半成品 chunk；
+- 异常后 `_restore_stored_copy` 再用临时副本补回已存文件（防止「删旧行 → 存新副本」之间失败）；
+- 用备份恢复 `sql.db`、docstore、vectorstore，并从经典界面的上传缓存
+  `ktem_app_data/gradio_tmp/<hash>/<原名>` 按 sha256 找回 7 个原始上传（逐个哈希校验一致），
+  恢复后检索正常（10 chunks / 3 files），7 个文件、20566 chunks 与备份一致；
+- 中断恢复由 `_dry_index` 兜底，页面可「重试重建」。
+
+**实测**
+
+| 项目 | 结果 |
+|---|---|
+| 隔离冒烟（独立 `KH_APP_DATA_DIR`，2 个 md、3 chunks/个，TEMP 指向可写目录） | 切到复制的 dashscope 模型：`done 2/2 failed=0`；切回：`done 2/2 failed=0`；两次切换后 chunk 数都与切换前一致（3/3） |
+| 真实语料恢复 | 备份恢复后 7 个文件、20566 chunks；`gradio_tmp` 找回 7 份上传（sha256 全对）；检索返回 10 chunks / 3 files |
+| 回滚备份 | `%TEMP%\dsh-reindex-smoke\backup`（`sql.db`、`docstore/`、`vectorstore/`；`sql.db` SHA-256 校验一致） |
+
+**测试**
+
+| 项目 | 结果 |
+|---|---|
+| 新增单测 | [test_embedding_switch.py](libs/ktem/ktem_tests/test_embedding_switch.py) 14 例：重建（移动默认、写索引配置、丢库、逐文件 reindex、失败不中断、原文缺失计数、失败保留上传字节）、任务状态机（进度/失败/单任务互斥）、API（管理员鉴权、未知模型 400、已在用 no-op、失败后可重试、启动/409/轮询、重排切换移动默认） |
+| 全套 | **425 passed** |
+| 前端 | `npm test` **48 passed**、typecheck / lint 干净；`npm run build` 通过（`index-DRGZqYLg.js`，274.20 kB gzip） |
+
+**注意**：向量切换是全局操作（重建所有索引），仅管理员可点；重建期间检索可能返回空结果（向量库
+已清空），页面文案已说明。MCP 是工具服务、不是模型池，没有「使用中/切换」概念，本次未加。

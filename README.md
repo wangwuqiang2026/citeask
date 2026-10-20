@@ -31,8 +31,8 @@
 
 - **数据入口**：修复默认配置下检索被静默跳过、扫描件正文未入库、`.docx` 索引失败三类缺陷；新增按页决策的 OCR 抽取器。
 - **检索与评测**：自建只跑检索层、零 token 成本的评测，用同一套题驱动切块、重排、拒答闸门和向量模型选型。
-- **全栈重构**：把单页应用替换为 React 18 + FastAPI `/api/v1`（39 个接口、SSE 流式、HttpOnly Cookie、管理员 RBAC），并保留 `/legacy` 回滚路径。
-- **工程化**：399 个 Python 用例 + 43 个前端单测进 CI、一键启动、`doctor` 自检、查询 trace 与 token 记账。
+- **全栈重构**：把单页应用替换为 React 18 + FastAPI `/api/v1`（43 个接口、SSE 流式、HttpOnly Cookie、管理员 RBAC），并保留 `/legacy` 回滚路径。
+- **工程化**：425 个 Python 用例 + 48 个前端单测进 CI、一键启动、`doctor` 自检、查询 trace 与 token 记账。
 
 逐条证据、定位过程和实测数字见 [MODIFICATIONS.md](MODIFICATIONS.md)。
 
@@ -45,14 +45,14 @@
 | 修复**检索静默失效**：默认配置下召回恒为空，模型绕过文档凭记忆作答 | 同一条默认路径：修复前召回 0 条 → 修复后正确命中并带引用（[§2.5](MODIFICATIONS.md#25-验证证据)） |
 | 新增**扫描件 OCR 检索链路**：文字层只有标题时按页 OCR 后再入库 | 同一份 PDF 正文从 **209 字符 → 2322 字符**，问题「英语四六级加几分」得到「四级 +4 分 / 六级 +6 分」并引用 `[第 2 页]`（[§2.7](MODIFICATIONS.md#27-同类缺陷二扫描版-pdf-的正文根本没进索引)） |
 | 上游**无 i18n 机制**下做中文界面：译文不落源码 | **336** 条词条、**296** 处标签本地化，剩余 18 条为刻意保留的品牌/标识符（[§3](MODIFICATIONS.md#三界面汉化引入翻译库译文不入代码)） |
-| **全栈重构**：Gradio 单页 → React 18 + FastAPI `/api/v1` | **39** 个接口、SSE 流式、HttpOnly Cookie、管理员 RBAC；**57** 个 API 测试 + **43** 个前端单测；首屏 JS **272.11 kB** gzip；`KH_WEB_UI=0` 可回滚（[§5.25](MODIFICATIONS.md#525-第二代前端react-spa--fastapi2026-10-18) / [§5.29](MODIFICATIONS.md#529-m4-起步模型供应商与-mcp-的增删改2026-10-19)） |
+| **全栈重构**：Gradio 单页 → React 18 + FastAPI `/api/v1` | **43** 个接口、SSE 流式、HttpOnly Cookie、管理员 RBAC；**61** 个 API 测试 + **48** 个前端单测；首屏 JS **274.20 kB** gzip；`KH_WEB_UI=0` 可回滚（[§5.25](MODIFICATIONS.md#525-第二代前端react-spa--fastapi2026-10-18) / [§5.29](MODIFICATIONS.md#529-m4-起步模型供应商与-mcp-的增删改2026-10-19)） |
 | 建立**检索评测**（只跑检索层，零 token 成本） | 私有 27 题 + 12 无答案：Hit@1 **59.3% → 88.9%**（单文件）、MRR 0.702 → **0.933**；公开 9 题可复现 Hit@1 **87.5%** / MRR **0.900**（[评测](#检索评测)） |
 | 让评测**在干净环境可复现** | 仓库自带 5 页示例语料 + 9 题配套题集 + 结果文件；配套单测保证"题目引用的页/事实"真的在那份语料里（`tools/tests/test_fixture_eval.py`） |
 | 向量模型**用评测选型**，而不是凭感觉 | 4 个候选模型横向对比，Hit@1 从 **36.7% → 60.0%**（30 题版本实测） |
 | 向量化可切换：**通义 API（默认）** 或 **本地 ONNX**（离线兜底） | 通义与本地 mpnet 指标相当（Hit@1 均 60.0%，30 题版本），前者省掉 1 GB 本地模型 |
 | **成本与延迟可量化**：默认关闭"每个召回块调一次 LLM 打分" | 1 次调用 / **3291 token**（关）vs 11 次 / **9043 token**（开）；检索 P50 约 **1.6 s**（[§5.10](MODIFICATIONS.md#510-成本与延迟每题的-token-与-p50p95)） |
 
-自动化测试 **399 个 Python 用例 + 43 个前端单测**全绿，全部离线运行（不联网、不调用模型）；CI 每次 push 都会跑一遍。
+自动化测试 **425 个 Python 用例 + 48 个前端单测**全绿，全部离线运行（不联网、不调用模型）；CI 每次 push 都会跑一遍。
 
 ---
 
@@ -61,7 +61,7 @@
 ```
 浏览器
 ├─ /            React 18 + TypeScript + Vite（web/dist 已提交，运行时不需要 Node）
-├─ /api/v1/*    FastAPI：JSON + SSE（ktem/api → ktem/services，39 个接口）
+├─ /api/v1/*    FastAPI：JSON + SSE（ktem/api → ktem/services，43 个接口）
 └─ /legacy/     经典 Gradio（迁移期回滚；KH_WEB_UI=0 时回到根路径）
 
                          │ 会话 / 检索范围 / 证据
@@ -526,6 +526,7 @@ npm run build    # 产出到 web/dist（提交这份产物）
 ```powershell
 # 先停掉应用（共用 sqlite / LanceDB）
 .\.venv\Scripts\python.exe -m pytest libs\kotaemon\tests\test_ocr_pdf_reader.py `
+    libs\kotaemon\tests\test_pptx_reader.py `
     libs\ktem\ktem_tests tools\tests -q --ignore=libs\ktem\ktem_tests\test_qa.py
 ```
 
@@ -540,7 +541,7 @@ npm run build    # 产出到 web/dist（提交这份产物）
 （`ktem_tests/test_entity_rows.py`、`ktem_tests/test_render_score.py`）、示例语料与题集的一致性
 （`tools/tests/test_fixture_eval.py`）。
 
-新增的 Web API / 前端托管契约（57 例，`MODIFICATIONS.md` §5.25–§5.29）：
+新增的 Web API / 前端托管契约（61 例，`MODIFICATIONS.md` §5.25–§5.36）：
 
 ```powershell
 # 本机访问不到 huggingface.co 时先打开离线开关：否则 App() 会为重试
@@ -563,7 +564,7 @@ $env:HF_HUB_OFFLINE="1"; $env:TRANSFORMERS_OFFLINE="1"
 cd web; npm test; npm run typecheck; npm run lint
 ```
 
-实测：Python **399 passed**（其中 Web API 契约 57 例），前端 `npm test` **43 passed**；
+实测：Python **425 passed**（其中 Web API 契约 61 例），前端 `npm test` **48 passed**；
 typecheck / lint 均无告警。
 
 新增模块的本地覆盖率（`coverage run -m pytest … && coverage report`，实测 321 个用例）：
@@ -590,9 +591,9 @@ README 里出现的每个数字都能用一条命令复现；"未测"就是未�
 | 索引健康（文件数、块数、向量数、空块比例、配置是否真生效） | `python tools/doctor.py --json <临时路径>` | 终端表格；`--strict` 让 WARN 也返回非零 |
 | 词表 336 条 | `python -m ktem.utils.i18n stats --language zh` | 终端输出 |
 | 正文 209 → 2322 字符（扫描件 OCR） | `python tools/reindex_corpus.py --match "积分细则"` 后查 `Source.note` | `ktem_app_data/user_data/sql.db` |
-| 测试通过数：Python **399** / 前端 **43** | 上面「测试」一节的 pytest 命令；`cd web; npm test` | 终端 / `.github/workflows/tests.yaml`（CI） |
-| Web API 契约 **57** 例 / **39** 个接口 | `pytest libs\ktem\ktem_tests\test_api_*.py ...`；接口数：`grep -c '^@router\.' libs/ktem/ktem/api/*.py` | CI `tests` job；`libs/ktem/ktem/api/` |
-| 首屏 JS **272.11 kB** gzip | `cd web; npm run build` | 构建输出 `dist/assets/index-*.js` |
+| 测试通过数：Python **425** / 前端 **48** | 上面「测试」一节的 pytest 命令；`cd web; npm test` | 终端 / `.github/workflows/tests.yaml`（CI） |
+| Web API 契约 **61** 例 / **43** 个接口 | `pytest libs\ktem\ktem_tests\test_api_*.py ...`；接口数：`grep -c '^@router\.' libs/ktem/ktem/api/*.py` | CI `tests` job；`libs/ktem/ktem/api/` |
+| 首屏 JS **274.20 kB** gzip | `cd web; npm run build` | 构建输出 `dist/assets/index-*.js` |
 
 > `tools/doctor.py` 的输出包含本机语料文件名，**不要把它提交进仓库**；
 > 需要留档时写到仓库外，或先脱敏。
@@ -609,7 +610,7 @@ README 里出现的每个数字都能用一条命令复现；"未测"就是未�
 │  └─ loaders/                      各类文件抽取器（docx/pptx/xls/PDF）
 ├─ libs/ktem/ktem/
 │  ├─ api/                     FastAPI 路由：auth/meta/chat/conversations/files/
-│  │                           settings/users/resources/help/vendors（39 个接口）
+│  │                           settings/users/resources/help/vendors（43 个接口）
 │  ├─ services/                业务层（不依赖 gradio，可脱离 UI 单测）
 │  ├─ utils/i18n.py            本地化流水线（采集 / 翻译 / 运行时 / JS 注入）
 │  ├─ utils/selector.py        检索范围选择的纯逻辑（可单测）

@@ -45,6 +45,14 @@ def test_meta_describes_the_application(logged_in):
     assert meta["languages"]["choices"], "languages must be offered"
     assert meta["models"]["choices"][0]["value"] == ""
 
+    # The active model is a real pool entry, not the hard-coded "" placeholder:
+    # the frontend shows it as the model the user is running on (MODIFICATIONS §5.33).
+    # A fresh install with no configured provider has an empty pool instead (§5.34).
+    choice_values = {item["value"] for item in meta["models"]["choices"]}
+    default_model = meta["models"]["default"]
+    assert default_model in choice_values
+    assert (default_model != "") == bool(choice_values - {""})
+
     if getattr(flowsettings, "KH_UI_LANGUAGE", "en") == "zh":
         labels = {item["label"] for item in meta["reasoning"]["choices"]}
         assert "简单问答" in labels, "reasoning labels must be localized"

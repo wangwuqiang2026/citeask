@@ -98,6 +98,29 @@ export function relevancePercent(item: {
   return Math.max(0, Math.min(100, Math.round(raw * 100)));
 }
 
+/**
+ * Whether the evidence panel lists this chunk as relevant (MODIFICATIONS §5.32).
+ *
+ * Two independent signals count: the answer cited the chunk, or the retrieval
+ * promoted it because it names the queried entity in a table cell
+ * (``entity_row``). Everything else is a retrieval *candidate* — shown under
+ * "show all", but not by default. A chunk without a vector score
+ * (``NO_SIMILARITY`` = -1.0) came from the entity-row or full-text pass; old
+ * conversations stored before ``entity_row`` existed only have that signal, so
+ * the flag's absence falls back to it. Once the payload carries the flag, trust
+ * it: a full-text-only hit is not an entity row.
+ */
+export function isRelevantEvidence(item: {
+  cited?: boolean;
+  entity_row?: boolean;
+  vector_score?: number | null;
+}): boolean {
+  if (item.cited) return true;
+  if (item.entity_row === true) return true;
+  if (item.entity_row === undefined) return item.vector_score === -1;
+  return false;
+}
+
 export function clampText(text: string, max = 240): string {
   const clean = text.replace(/\s+/g, " ").trim();
   return clean.length > max ? `${clean.slice(0, max).trimEnd()}…` : clean;

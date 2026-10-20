@@ -7,6 +7,8 @@ from theflow.utils.modules import deserialize
 
 from kotaemon.embeddings.base import BaseEmbeddings
 
+from ktem.utils.model_presets import sync_presets
+
 from .db import EmbeddingTable, engine
 
 
@@ -19,17 +21,16 @@ class EmbeddingManager:
         self._default: str = ""
         self._vendors: list[Type] = []
 
-        # populate the pool if empty
+        # Seed only the embeddings this deployment can run and drop vendor
+        # templates that still carry placeholder credentials — the resources page
+        # must list the user's model pool, not provider examples (§5.35).
         if hasattr(flowsettings, "KH_EMBEDDINGS"):
-            with Session(engine) as sess:
-                count = sess.query(EmbeddingTable).count()
-            if not count:
-                for name, model in flowsettings.KH_EMBEDDINGS.items():
-                    self.add(
-                        name=name,
-                        spec=model["spec"],
-                        default=model.get("default", False),
-                    )
+            report = sync_presets(EmbeddingTable, flowsettings.KH_EMBEDDINGS)
+            if report["seeded"] or report["pruned"]:
+                print(
+                    "embedding presets: "
+                    f"seeded={report['seeded']} pruned={report['pruned']}"
+                )
 
         self.load()
         self.load_vendors()

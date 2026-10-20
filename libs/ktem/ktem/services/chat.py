@@ -19,6 +19,7 @@ from typing import Any, Iterator
 
 from ktem.components import reasonings
 from ktem.db.models import engine
+from ktem.llms.manager import llms
 from ktem.reasoning.prompt_optimization.suggest_conversation_name import (
     SuggestConvNamePipeline,
 )
@@ -125,6 +126,12 @@ class ChatService:
         command: str | None = None,
     ):
         """Build the reasoning pipeline, mirroring ``ChatPage.create_pipeline``."""
+        # Presets with placeholder credentials are no longer seeded (MODIFICATIONS
+        # §5.34), so a fresh install may have no model at all. Say what to do
+        # instead of failing with upstream's "No models in pool".
+        if not llms.options():
+            raise ValueError("尚未配置对话模型：请到「资源 → 模型资源」添加一个模型")
+
         reasoning_mode = (overrides or {}).get("reasoning") or settings.get(
             "reasoning.use"
         )

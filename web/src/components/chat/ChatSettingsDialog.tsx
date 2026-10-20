@@ -1,4 +1,6 @@
 import { useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 import {
   Dialog,
@@ -16,7 +18,9 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useMeta } from "@/hooks/use-api";
+import { api } from "@/lib/api";
 import { useT } from "@/lib/i18n";
+import { queryKeys } from "@/lib/query";
 import type { Choice, SelectionMode } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useChatSettings } from "@/stores/chat-settings";
@@ -74,6 +78,7 @@ function ChoiceSelect({
 
 export function ChatSettingsDialog({ open, onOpenChange }: ChatSettingsDialogProps) {
   const t = useT();
+  const queryClient = useQueryClient();
   const { data: meta } = useMeta();
   const settings = useChatSettings();
   const update = useChatSettings((state) => state.update);
@@ -85,6 +90,21 @@ export function ChatSettingsDialog({ open, onOpenChange }: ChatSettingsDialogPro
   if (!meta) return null;
 
   const mindmapOn = settings.mindmap ?? meta.features.mindmap;
+  // "(default)" is not a model: the account always resolves to a concrete one,
+  // and the resources page marks that one as in use (MODIFICATIONS §5.33).
+  const modelChoices = meta.models.choices.filter((choice) => choice.value !== "");
+
+  const changeModel = (llm: string) => {
+    update({ llm });
+    void api
+      .setCurrentLlm(llm)
+      .then(() => {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.meta });
+        void queryClient.invalidateQueries({ queryKey: queryKeys.resources });
+      })
+      .catch((error: Error) => toast.error(error.message));
+  };
+
   const scopeOptions: { value: SelectionMode; label: string }[] = [
     { value: "all", label: t("settings.scopeAll") },
     { value: "select", label: t("settings.scopeSelect") },
@@ -109,13 +129,13 @@ export function ChatSettingsDialog({ open, onOpenChange }: ChatSettingsDialogPro
             />
           </Field>
 
-          {meta.models.choices.length > 0 ? (
+          {modelChoices.length > 0 ? (
             <Field id="setting-model" label={t("settings.model")}>
               <ChoiceSelect
                 id="setting-model"
                 value={settings.llm}
-                choices={meta.models.choices}
-                onChange={(llm) => update({ llm })}
+                choices={modelChoices}
+                onChange={changeModel}
               />
             </Field>
           ) : null}

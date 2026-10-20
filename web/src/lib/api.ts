@@ -6,6 +6,8 @@ import type {
   ChunksResponse,
   ConversationDetail,
   ConversationSummary,
+  EmbeddingJob,
+  EmbeddingSwitchResult,
   EvidenceItem,
   FileGroupItem,
   FileListResponse,
@@ -286,6 +288,44 @@ export const api = {
   /** Configured indices and model pools (read-only, for `/resources`). */
   async getResources(): Promise<ResourcesPayload> {
     return request<ResourcesPayload>("/api/v1/resources");
+  },
+
+  /**
+   * Store the LLM this account's chat runs on (`""` = follow the pool default).
+   * Persisted in the account, so `/meta` and every device agree (§5.33).
+   */
+  async setCurrentLlm(name: string): Promise<{ name: string }> {
+    if (USE_MOCK) return (await import("./mock")).mockApi.setCurrentLlm(name);
+    return request<{ name: string }>("/api/v1/resources/llm", {
+      method: "PUT",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ name }),
+    });
+  },
+
+  /**
+   * Switch the embedding model. The server rebuilds the whole index in the
+   * background; poll {@link getEmbeddingJob} for progress (§5.36).
+   */
+  async setEmbedding(name: string): Promise<EmbeddingSwitchResult> {
+    return request<EmbeddingSwitchResult>("/api/v1/resources/embedding", {
+      method: "PUT",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ name }),
+    });
+  },
+
+  async getEmbeddingJob(): Promise<{ job: EmbeddingJob }> {
+    return request<{ job: EmbeddingJob }>("/api/v1/resources/embedding/job");
+  },
+
+  /** Switch the reranker; effective immediately, no rebuild needed (§5.36). */
+  async setCurrentReranking(name: string): Promise<{ name: string }> {
+    return request<{ name: string }>("/api/v1/resources/reranking", {
+      method: "PUT",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ name }),
+    });
   },
 
   /** Bundled About / user-guide documents (read-only, for `/help`). */

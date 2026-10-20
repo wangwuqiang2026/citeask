@@ -29,7 +29,10 @@ export const useChatSettings = create<ChatSettingsState>()(
       hydrate: (meta) =>
         set((state) => ({
           reasoning: state.reasoning ?? meta.reasoning.default,
-          llm: state.llm ?? "",
+          // The account-level model is the source of truth: it is what the chat
+          // runs on and what the resources page marks as "in use" (MODIFICATIONS
+          // §5.33). A meta refetch after switching brings the new value back.
+          llm: meta.models.default || state.llm || "",
           language: state.language ?? meta.languages.default,
           citation: state.citation ?? meta.citations.default,
         })),

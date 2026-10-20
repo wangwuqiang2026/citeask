@@ -45,15 +45,43 @@ def test_evidence_records_are_json_friendly_and_cited_first():
     assert [item["file_name"] for item in items] == ["制度.pdf", "无关.pdf", "其他.pdf"]
     assert items[0]["cited"] is True
     assert items[0]["score"] == 0.9, "the reranker score is the displayed relevance"
+    assert items[0]["rerank_score"] == 0.9
     assert items[0]["vector_score"] == 0.2
     assert items[0]["spans"] == [{"start": 0, "end": 2, "idx": 1}]
     assert items[1]["cited"] is False
     assert items[1]["spans"] == []
+    # no reranker ran on these chunks: the score is missing, not 0.0. The panel must
+    # be able to tell "never scored" from "the reranker said zero" (MODIFICATIONS §5.32)
+    assert items[1]["rerank_score"] is None
+    assert items[2]["rerank_score"] is None
 
     # every record must survive JSON serialisation (the SSE layer dumps it)
     import json
 
     json.dumps(items)
+
+
+def test_entity_row_chunks_are_flagged_and_carry_no_lexical_score():
+    """The row lookup adds chunks after reranking; they are cited-relevant evidence.
+
+    A promoted row has ``score = NO_SIMILARITY`` and no ``rerank_score`` metadata, so
+    the payload used to show ``0.0`` for the chunk that actually names the queried
+    person (MODIFICATIONS §5.32).
+    """
+    promoted = make_doc("实践表.xlsx", "…王务强 32…", -1.0, entity_row=True)
+    regular = make_doc("制度.pdf", "制度正文", 0.35, rerank_score=0.0)
+
+    spans = {promoted.doc_id: [{"start": 0, "end": 2, "idx": None}]}
+    service = SimpleNamespace(answering_pipeline=FakeAnsweringPipeline(spans))
+    items = FullQAPipeline.structured_evidence(
+        service, SimpleNamespace(), [regular, promoted]
+    )
+
+    assert items[0]["cited"] is True
+    assert items[0]["entity_row"] is True
+    assert items[0]["rerank_score"] is None, "a missing score is not a zero score"
+    assert items[1]["entity_row"] is False
+    assert items[1]["rerank_score"] == 0.0, "a reranker verdict of zero stays zero"
 
 
 def test_evidence_survives_a_failing_span_matcher():

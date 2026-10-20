@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Check,
   CircleAlert,
   ExternalLink,
   FolderOpen,
@@ -7,7 +8,7 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { PageFrame } from "@/components/app/PageFrame";
@@ -32,6 +33,7 @@ import { useT } from "@/lib/i18n";
 import { queryKeys } from "@/lib/query";
 import type { User, VendorEntry } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useChatSettings } from "@/stores/chat-settings";
 
 type TabKey = "indices" | "models" | "users";
 
@@ -89,13 +91,23 @@ function Section({
   );
 }
 
-type PoolRow = { name: string; vendor?: string; model?: string; default?: boolean };
+type PoolRow = {
+  name: string;
+  vendor?: string;
+  model?: string;
+  default?: boolean;
+  /** Set by the server: the model the index actually runs on (read-only pools). */
+  in_use?: boolean;
+};
 
 function ModelPool({
   title,
   rows,
   canEdit,
   addLabel,
+  currentName,
+  busy = false,
+  onUse,
   onAdd,
   onEdit,
   onRemove,
@@ -104,6 +116,11 @@ function ModelPool({
   rows: PoolRow[];
   canEdit: boolean;
   addLabel?: string;
+  /** The model this account's chat runs on (LLM pool only). */
+  currentName?: string;
+  /** A rebuild is running: adding/switching models now would race with it. */
+  busy?: boolean;
+  onUse?: (row: PoolRow) => void;
   onAdd?: () => void;
   onEdit?: (row: PoolRow) => void;
   onRemove?: (row: PoolRow) => void;
@@ -121,6 +138,7 @@ function ModelPool({
             size="icon-sm"
             aria-label={addTitle}
             title={addTitle}
+            disabled={busy}
             onClick={onAdd}
           >
             <Plus className="h-4 w-4" aria-hidden="true" />
@@ -132,47 +150,66 @@ function ModelPool({
         <p className="px-4 py-3 text-sm text-subtle">{t("resources.empty")}</p>
       ) : (
         <ul className="divide-y divide-border">
-          {rows.map((row) => (
-            <li
-              key={row.name}
-              className="flex flex-wrap items-center gap-2 px-4 py-2.5"
-            >
-              <span className="min-w-0 flex-1 truncate text-sm text-fg">
-                {row.name}
-              </span>
-              {row.default ? (
-                <Badge variant="accent">{t("resources.defaultBadge")}</Badge>
-              ) : null}
-              {row.vendor ? <Badge variant="outline">{row.vendor}</Badge> : null}
-              {row.model ? (
-                <span className="max-w-[40%] truncate text-2xs text-subtle">
-                  {row.model}
+          {rows.map((row) => {
+            const inUse =
+              row.in_use ?? (Boolean(currentName) && row.name === currentName);
+            return (
+              <li
+                key={row.name}
+                className="flex flex-wrap items-center gap-2 px-4 py-2.5"
+              >
+                <span className="min-w-0 flex-1 truncate text-sm text-fg">
+                  {row.name}
                 </span>
-              ) : null}
-              {canEdit ? (
-                <div className="flex shrink-0 gap-1">
+                {row.default ? (
+                  <Badge variant="accent">{t("resources.defaultBadge")}</Badge>
+                ) : null}
+                {inUse ? (
+                  <Badge variant="success">{t("resources.inUse")}</Badge>
+                ) : null}
+                {row.vendor ? <Badge variant="outline">{row.vendor}</Badge> : null}
+                {row.model ? (
+                  <span className="max-w-[40%] truncate text-2xs text-subtle">
+                    {row.model}
+                  </span>
+                ) : null}
+                {onUse && !inUse ? (
                   <Button
                     variant="ghost"
                     size="icon-sm"
-                    aria-label={t("resources.editModel")}
-                    title={t("resources.editModel")}
-                    onClick={() => onEdit?.(row)}
+                    aria-label={t("resources.useModel")}
+                    title={t("resources.useModel")}
+                    disabled={busy}
+                    onClick={() => onUse(row)}
                   >
-                    <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                    <Check className="h-3.5 w-3.5" aria-hidden="true" />
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={t("common.delete")}
-                    title={t("common.delete")}
-                    onClick={() => onRemove?.(row)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                  </Button>
-                </div>
-              ) : null}
-            </li>
-          ))}
+                ) : null}
+                {canEdit ? (
+                  <div className="flex shrink-0 gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={t("resources.editModel")}
+                      title={t("resources.editModel")}
+                      onClick={() => onEdit?.(row)}
+                    >
+                      <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={t("common.delete")}
+                      title={t("common.delete")}
+                      onClick={() => onRemove?.(row)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                    </Button>
+                  </div>
+                ) : null}
+              </li>
+            );
+          })}
         </ul>
       )}
     </Section>
@@ -483,11 +520,83 @@ export function ResourcesPage() {
     name: string;
     isDefault: boolean;
   } | null>(null);
+  const [embeddingTarget, setEmbeddingTarget] = useState<PoolRow | null>(null);
 
   const refreshResources = () => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.resources });
     void queryClient.invalidateQueries({ queryKey: queryKeys.meta });
   };
+
+  // Switching the embedding model drops and rebuilds the index; the server runs
+  // that in the background and this poll reports progress (§5.36).
+  const embeddingJobQuery = useQuery({
+    queryKey: queryKeys.embeddingJob,
+    queryFn: () => api.getEmbeddingJob(),
+    enabled: isAdmin,
+    refetchInterval: (query) =>
+      query.state.data?.job.state === "running" ? 1200 : false,
+  });
+  const job = embeddingJobQuery.data?.job;
+  const reindexing = job?.state === "running";
+  const lastJobState = useRef<string | null>(null);
+  useEffect(() => {
+    if (!job) return;
+    if (lastJobState.current === null) {
+      lastJobState.current = job.state;
+      return;
+    }
+    if (lastJobState.current === job.state) return;
+    lastJobState.current = job.state;
+    if (job.state === "done") {
+      toast.success(job.message || t("resources.reindexDone"));
+      refreshResources();
+    } else if (job.state === "error") {
+      toast.error(job.message || t("resources.reindexError"));
+      refreshResources();
+    }
+  }, [job]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const switchEmbedding = useMutation({
+    mutationFn: (name: string) => api.setEmbedding(name),
+    onSuccess: (data) => {
+      setEmbeddingTarget(null);
+      if (!data.started) {
+        toast.info(t("resources.alreadyInUse", { name: data.job.embedding }));
+        refreshResources();
+        return;
+      }
+      toast.success(
+        t("resources.rebuildStarted", { name: data.job.embedding }),
+      );
+      queryClient.setQueryData(queryKeys.embeddingJob, { job: data.job });
+    },
+    onError: (error: Error) => {
+      setEmbeddingTarget(null);
+      toast.error(error.message);
+    },
+  });
+
+  // Reranking happens per query, so this switch needs no rebuild (§5.36).
+  const switchReranking = useMutation({
+    mutationFn: (name: string) => api.setCurrentReranking(name),
+    onSuccess: (data) => {
+      toast.success(t("resources.switchedTo", { name: data.name }));
+      refreshResources();
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  // The model this account's chat runs on: persisted in the account, so the
+  // resources page, the chat header and every device agree (MODIFICATIONS §5.33).
+  const switchLlm = useMutation({
+    mutationFn: (name: string) => api.setCurrentLlm(name),
+    onSuccess: (data) => {
+      useChatSettings.getState().update({ llm: data.name });
+      toast.success(t("resources.switchedTo", { name: data.name }));
+      refreshResources();
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
 
   const removeVendor = useMutation({
     mutationFn: (target: { kind: string; name: string }) =>
@@ -617,16 +726,50 @@ export function ResourcesPage() {
             title={t("resources.llms")}
             rows={resources.llms}
             canEdit={isAdmin}
+            currentName={meta?.models.default}
+            onUse={(row) => switchLlm.mutate(row.name)}
             onAdd={() => setVendorDialog({ kind: "llms", entry: null })}
             onEdit={(row) => void openEdit("llms", row.name)}
             onRemove={(row) =>
               setRemoveTarget({ kind: "llms", name: row.name, isDefault: !!row.default })
             }
           />
+          <p
+            className={cn(
+              "text-2xs",
+              reindexing
+                ? "text-accent"
+                : job?.state === "error"
+                  ? "text-danger"
+                  : "text-subtle",
+            )}
+            role={job?.state === "error" ? "alert" : undefined}
+          >
+            {reindexing
+              ? t("resources.reindexing", {
+                  name: job?.embedding ?? "",
+                  done: job?.done ?? 0,
+                  total: job?.total ?? 0,
+                })
+              : job?.state === "done" || job?.state === "error"
+                ? job.message
+                : t("resources.embeddingsHint")}
+          </p>
+          {job && !reindexing && (job.state === "error" || job.failed > 0) ? (
+            <button
+              type="button"
+              className="text-2xs text-accent hover:underline"
+              onClick={() => switchEmbedding.mutate(job.embedding)}
+            >
+              {t("resources.retryRebuild")}
+            </button>
+          ) : null}
           <ModelPool
             title={t("resources.embeddings")}
             rows={resources.embeddings}
             canEdit={isAdmin}
+            busy={reindexing}
+            onUse={(row) => setEmbeddingTarget(row)}
             onAdd={() => setVendorDialog({ kind: "embeddings", entry: null })}
             onEdit={(row) => void openEdit("embeddings", row.name)}
             onRemove={(row) =>
@@ -637,6 +780,7 @@ export function ResourcesPage() {
             title={t("resources.rerankings")}
             rows={resources.rerankings}
             canEdit={isAdmin}
+            onUse={(row) => switchReranking.mutate(row.name)}
             onAdd={() => setVendorDialog({ kind: "rerankings", entry: null })}
             onEdit={(row) => void openEdit("rerankings", row.name)}
             onRemove={(row) =>
@@ -718,6 +862,23 @@ export function ResourcesPage() {
         pending={removeVendor.isPending}
         onConfirm={() => {
           if (removeTarget) removeVendor.mutate(removeTarget);
+        }}
+      />
+
+      <ConfirmDialog
+        open={embeddingTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setEmbeddingTarget(null);
+        }}
+        title={t("resources.switchEmbeddingTitle")}
+        description={t("resources.switchEmbeddingDescription", {
+          name: embeddingTarget?.name ?? "",
+          n: resources?.indices.reduce((sum, index) => sum + index.file_count, 0) ?? 0,
+        })}
+        confirmLabel={t("resources.switchAndRebuild")}
+        pending={switchEmbedding.isPending}
+        onConfirm={() => {
+          if (embeddingTarget) switchEmbedding.mutate(embeddingTarget.name);
         }}
       />
     </PageFrame>

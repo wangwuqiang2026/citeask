@@ -88,6 +88,21 @@ export function VendorDialog({
     [catalog, vendor],
   );
 
+  // The supported models are shown where they belong: next to the picker that
+  // creates one. The resources list itself only shows what the user added (§5.34).
+  const supportedModels = useMemo(
+    () =>
+      catalog.map((entry) => {
+        const model = entry.params.find((param) =>
+          ["model", "model_name", "model_id", "model_path"].includes(param.name),
+        )?.default;
+        return typeof model === "string" && model
+          ? `${entry.name}（${model}）`
+          : entry.name;
+      }),
+    [catalog],
+  );
+
   useEffect(() => {
     if (!open) return;
     const nextVendor = entry?.vendor ?? catalog[0]?.name ?? "";
@@ -234,6 +249,13 @@ export function VendorDialog({
                 </option>
               ))}
             </select>
+            {supportedModels.length > 0 ? (
+              <p className="text-2xs text-subtle">
+                {t("resources.supportedModels", {
+                  list: supportedModels.join(" · "),
+                })}
+              </p>
+            ) : null}
           </label>
 
           <div className="space-y-3 rounded-md border border-border p-3">

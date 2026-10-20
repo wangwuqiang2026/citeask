@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import type { ConversationSummary } from "./types.ts";
-import { groupConversations, legacyFileUrl, relevancePercent } from "./utils.ts";
+import {
+  groupConversations,
+  isRelevantEvidence,
+  legacyFileUrl,
+  relevancePercent,
+} from "./utils.ts";
 
 function conversation(id: string, date: string): ConversationSummary {
   return {
@@ -71,5 +76,36 @@ describe("relevancePercent", () => {
     assert.equal(relevancePercent({ score: 0.5 }), 50);
     assert.equal(relevancePercent({ rerank_score: 3 }), 100);
     assert.equal(relevancePercent({ score: -2 }), 0);
+  });
+});
+
+describe("isRelevantEvidence", () => {
+  it("keeps cited evidence", () => {
+    assert.equal(isRelevantEvidence({ cited: true }), true);
+  });
+
+  it("keeps entity-row hits the answer did not cite", () => {
+    assert.equal(isRelevantEvidence({ cited: false, entity_row: true }), true);
+  });
+
+  it("drops an ordinary uncited vector candidate", () => {
+    assert.equal(
+      isRelevantEvidence({ cited: false, entity_row: false, vector_score: 0.35 }),
+      false,
+    );
+  });
+
+  it("falls back to NO_SIMILARITY for conversations stored before entity_row", () => {
+    // The entity-row / full-text passes are the only sources of -1.0 chunks.
+    assert.equal(isRelevantEvidence({ cited: false, vector_score: -1 }), true);
+    assert.equal(isRelevantEvidence({ cited: false, vector_score: 0.35 }), false);
+  });
+
+  it("trusts the explicit flag once the payload has it", () => {
+    // A full-text-only hit in a new payload is not an entity row and stays a candidate.
+    assert.equal(
+      isRelevantEvidence({ cited: false, entity_row: false, vector_score: -1 }),
+      false,
+    );
   });
 });

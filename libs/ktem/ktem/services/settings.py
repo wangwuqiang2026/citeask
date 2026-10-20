@@ -43,6 +43,10 @@ def _item(key: str, item) -> dict:
 class SettingsService:
     """Read, write and describe the per-user settings."""
 
+    #: The slots that store which LLM a reasoning mode runs on. ReWOO keeps a
+    #: planner and a solver slot; the other modes keep a single ``llm`` slot.
+    LLM_SLOTS = ("llm", "planner_llm", "solver_llm")
+
     def __init__(self, app):
         self._app = app
 
@@ -56,6 +60,31 @@ class SettingsService:
         if row is None or not isinstance(row.setting, dict):
             return defaults
         return {**defaults, **row.setting}
+
+    def llm_setting_keys(self, values: dict) -> list[str]:
+        """The setting keys that hold the LLM of the user's active reasoning mode.
+
+        The web UI lets the user pick the model in one place (the resources page /
+        chat settings), so the choice has to be written to whichever slot the
+        active reasoning mode reads — one key normally, two for ReWOO
+        (MODIFICATIONS §5.33).
+        """
+        reasoning = str(values.get("reasoning.use") or "simple")
+        prefix = f"reasoning.options.{reasoning}"
+        return [
+            f"{prefix}.{slot}"
+            for slot in self.LLM_SLOTS
+            if f"{prefix}.{slot}" in values
+        ]
+
+    def current_llm(self, user_id: Any) -> str:
+        """The model this user's chat runs on (``""`` = follow the pool default)."""
+        values = self.load(user_id)
+        for key in self.llm_setting_keys(values):
+            name = str(values.get(key) or "")
+            if name:
+                return name
+        return ""
 
     def schema(self) -> dict:
         """Describe every setting as a group of form fields."""

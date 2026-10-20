@@ -26,6 +26,7 @@ export const queryKeys = {
   fileChunks: (fileId: string, type: string) =>
     ["file-chunks", fileId, type] as const,
   resources: ["resources"] as const,
+  embeddingJob: ["embedding-job"] as const,
   help: ["help"] as const,
   users: ["users"] as const,
   vendorCatalog: ["vendors", "catalog"] as const,

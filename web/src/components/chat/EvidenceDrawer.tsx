@@ -6,7 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useT } from "@/lib/i18n";
 import type { EvidenceItem } from "@/lib/types";
-import { cn, legacyFileUrl, relevancePercent } from "@/lib/utils";
+import {
+  cn,
+  isRelevantEvidence,
+  legacyFileUrl,
+  relevancePercent,
+} from "@/lib/utils";
 
 interface EvidenceDrawerProps {
   items: EvidenceItem[];
@@ -58,15 +63,33 @@ function Highlighted({ text, query }: { text: string; query: string }) {
 export function EvidenceDrawer({ items, activeIndex, onClose }: EvidenceDrawerProps) {
   const t = useT();
   const [query, setQuery] = useState("");
+  const [showAll, setShowAll] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
+
+  // The panel's job is to show the sources of this answer, not every chunk the
+  // retrieval happened to keep: cited chunks and entity-row hits by default, the
+  // rest behind "show all" (MODIFICATIONS §5.32). A turn with nothing relevant
+  // (refusal, citations off) falls back to the candidates so the panel still
+  // explains what was retrieved.
+  const related = useMemo(() => items.filter(isRelevantEvidence), [items]);
+  const showingAll = showAll || related.length === 0;
+
+  const visible = useMemo(() => {
+    const base = showingAll ? items : related;
+    if (activeIndex === null) return base;
+    const activeItem = items[activeIndex];
+    // Keep the cited chunk the user just clicked visible even when filtered out.
+    if (!activeItem || base.includes(activeItem)) return base;
+    return [activeItem, ...base];
+  }, [activeIndex, items, related, showingAll]);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    if (!needle) return items;
-    return items.filter((item) =>
+    if (!needle) return visible;
+    return visible.filter((item) =>
       `${item.file_name} ${item.text} ${item.type ?? ""}`.toLowerCase().includes(needle),
     );
-  }, [items, query]);
+  }, [visible, query]);
 
   useEffect(() => {
     if (activeIndex === null) return;
@@ -78,8 +101,25 @@ export function EvidenceDrawer({ items, activeIndex, onClose }: EvidenceDrawerPr
     <div className="flex h-full min-h-0 flex-col bg-panel">
       <div className="flex items-center gap-2 border-b border-border px-3 py-2.5">
         <h2 className="text-sm font-semibold text-fg">{t("evidence.title")}</h2>
-        <span className="text-2xs text-subtle">{t("evidence.count", { n: items.length })}</span>
+        <span className="text-2xs text-subtle">
+          {showingAll
+            ? t("evidence.count", { n: items.length })
+            : t("evidence.countRelated", { n: related.length, total: items.length })}
+        </span>
         <div className="flex-1" />
+        {related.length > 0 && related.length < items.length ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-2xs"
+            aria-pressed={showAll}
+            onClick={() => setShowAll((current) => !current)}
+          >
+            {showAll
+              ? t("evidence.showRelevant", { n: related.length })
+              : t("evidence.showAll", { n: items.length })}
+          </Button>
+        ) : null}
         {onClose ? (
           <Button
             variant="ghost"
@@ -108,6 +148,12 @@ export function EvidenceDrawer({ items, activeIndex, onClose }: EvidenceDrawerPr
         </div>
       </div>
 
+      {items.length > 0 && related.length === 0 ? (
+        <p className="border-b border-border bg-elevated px-3 py-2 text-2xs text-subtle">
+          {t("evidence.relatedFallback")}
+        </p>
+      ) : null}
+
       <div ref={listRef} className="scroll-thin min-h-0 flex-1 overflow-y-auto p-3">
         {items.length === 0 ? (
           <div className="rounded-md border border-dashed border-border bg-elevated p-6 text-center text-sm text-muted">
@@ -117,10 +163,15 @@ export function EvidenceDrawer({ items, activeIndex, onClose }: EvidenceDrawerPr
           <div className="p-6 text-center text-sm text-muted">{t("evidence.noMatch")}</div>
         ) : (
           <ul className="space-y-2">
-            {filtered.map((item, index) => {
+            {filtered.map((item) => {
               const originalIndex = items.indexOf(item);
               const active = activeIndex === originalIndex;
               const score = relevancePercent(item);
+              // The percent is a *candidate ordering* hint from the local lexical
+              // reranker, not semantic relevance. It only belongs next to the
+              // candidate list, and a 0 is spelled out instead of shown as "0%",
+              // which used to sit next to 已被引用 and looked like a bug (§5.32).
+              const showScore = showingAll && !item.entity_row;
               return (
                 <li key={item.id}>
                   <article
@@ -154,24 +205,34 @@ export function EvidenceDrawer({ items, activeIndex, onClose }: EvidenceDrawerPr
                           <Badge variant={item.cited ? "accent" : "outline"}>
                             {item.cited ? t("evidence.cited") : t("evidence.notCited")}
                           </Badge>
+                          {item.entity_row ? (
+                            <Badge variant="subtle">{t("evidence.entityRow")}</Badge>
+                          ) : null}
                         </div>
                       </div>
-                      <span className="shrink-0 font-mono text-2xs text-subtle">{score}%</span>
                     </header>
 
-                    <div className="mt-2.5 flex items-center gap-2">
-                      <span className="text-2xs text-subtle">{t("evidence.relevance")}</span>
-                      <div
-                        className="h-1.5 flex-1 overflow-hidden rounded-full bg-border"
-                        role="img"
-                        aria-label={`${t("evidence.relevance")} ${score}%`}
-                      >
-                        <div
-                          className="h-full rounded-full bg-accent"
-                          style={{ width: `${score}%` }}
-                        />
+                    {showScore ? (
+                      <div className="mt-2.5 flex items-center gap-2">
+                        <span className="shrink-0 text-2xs text-subtle">
+                          {score > 0
+                            ? t("evidence.literalMatch", { n: score })
+                            : t("evidence.noLiteralMatch")}
+                        </span>
+                        {score > 0 ? (
+                          <div
+                            className="h-1.5 flex-1 overflow-hidden rounded-full bg-border"
+                            role="img"
+                            aria-label={t("evidence.literalMatch", { n: score })}
+                          >
+                            <div
+                              className="h-full rounded-full bg-accent"
+                              style={{ width: `${score}%` }}
+                            />
+                          </div>
+                        ) : null}
                       </div>
-                    </div>
+                    ) : null}
 
                     <p className="mt-2 line-clamp-4 text-sm leading-relaxed text-muted">
                       <Highlighted text={item.text} query={query} />
@@ -190,7 +251,7 @@ export function EvidenceDrawer({ items, activeIndex, onClose }: EvidenceDrawerPr
                     </div>
 
                     <span className="sr-only">
-                      {t("evidence.source")} {index + 1}
+                      {t("evidence.source")} {originalIndex + 1}
                     </span>
                   </article>
                 </li>

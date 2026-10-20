@@ -15,7 +15,12 @@ from ktem.reasoning.prompt_optimization import (
     RewriteQuestionPipeline,
 )
 from ktem.utils.i18n import tr
-from ktem.utils.render import Render, relevance_score_of, reranking_score_of
+from ktem.utils.render import (
+    Render,
+    has_rerank_score,
+    relevance_score_of,
+    reranking_score_of,
+)
 from ktem.utils.trace import TraceRecorder
 from ktem.utils.visualize_cited import CreateCitationVizPipeline
 from plotly.io import to_json
@@ -360,6 +365,11 @@ class FullQAPipeline(BaseReasoning):
                 llm_score = round(float(metadata.get("llm_trulens_score") or 0.0), 2)
             except (TypeError, ValueError):
                 llm_score = 0.0
+            # ``None`` means no reranker scored this chunk (the entity-row pass adds
+            # chunks after reranking). The panel must not show that as ``0.0`` — a
+            # zero is the reranker's verdict, a missing score is not (MODIFICATIONS
+            # §5.32). ``score`` keeps its meaning for sorting.
+            rerank_score = reranking_score_of(doc) if has_rerank_score(doc) else None
             items.append(
                 {
                     "id": doc.doc_id,
@@ -369,11 +379,12 @@ class FullQAPipeline(BaseReasoning):
                     "type": metadata.get("type", "text"),
                     "score": score,
                     "vector_score": round(float(getattr(doc, "score", 0.0) or 0.0), 4),
-                    "rerank_score": reranking_score_of(doc),
+                    "rerank_score": rerank_score,
                     "llm_score": llm_score,
                     "text": (doc.text or "")[:4000],
                     "file_path": metadata.get("file_path", ""),
                     "cited": bool(clean_spans),
+                    "entity_row": bool(metadata.get("entity_row", False)),
                     "spans": clean_spans,
                 }
             )

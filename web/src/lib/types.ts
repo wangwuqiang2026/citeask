@@ -39,6 +39,8 @@ export interface EvidenceItem {
   text: string;
   file_path?: string | null;
   cited?: boolean;
+  /** Promoted by the entity-row lookup because it names the queried entity. */
+  entity_row?: boolean;
   spans?: EvidenceSpan[];
 }
 
@@ -229,6 +231,8 @@ export interface ModelResource {
   vendor: string;
   model: string;
   default: boolean;
+  /** Embeddings only: the index actually runs on this model (read-only). */
+  in_use?: boolean;
 }
 
 export interface ResourcesPayload {
@@ -237,6 +241,21 @@ export interface ResourcesPayload {
   embeddings: ModelResource[];
   rerankings: ModelResource[];
   mcp: { name: string }[];
+}
+
+/** Progress of the background index rebuild that follows an embedding switch. */
+export interface EmbeddingJob {
+  state: "idle" | "running" | "done" | "error";
+  embedding: string;
+  total: number;
+  done: number;
+  failed: number;
+  message: string;
+}
+
+export interface EmbeddingSwitchResult {
+  started: boolean;
+  job: EmbeddingJob;
 }
 
 export interface HelpPayload {

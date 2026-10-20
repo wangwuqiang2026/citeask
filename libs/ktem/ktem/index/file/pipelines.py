@@ -658,7 +658,13 @@ class DocumentRetrievalPipeline(BaseFileIndexRetriever):
                 for term in identifiers
             ):
                 continue
-            picked.append(RetrievedDocument(**doc.to_dict(), score=NO_SIMILARITY))
+            row_doc = RetrievedDocument(**doc.to_dict(), score=NO_SIMILARITY)
+            # The evidence panel explains why a chunk that the vector search ranked
+            # poorly is in the context: it names the queried entity in a table cell.
+            # Kept on the metadata (not in the docstore) so the flag never outlives
+            # this one query (MODIFICATIONS §5.32).
+            row_doc.metadata = {**(row_doc.metadata or {}), "entity_row": True}
+            picked.append(row_doc)
             seen_files.add(file_id)
             if len(picked) >= limit:
                 break

@@ -35,6 +35,7 @@ const EVIDENCE: EvidenceItem[] = [
     text: "综合测评由德育、智育、体育三部分构成，德育占 30%，智育占 50%，体育占 20%。班级前 10% 可参评一等奖学金。",
     file_path: "ktem_app_data/user_data/files/示例班级学年综测汇总表.xlsx",
     cited: true,
+    entity_row: false,
     spans: [{ start: 0, end: 12, idx: 1 }],
   },
   {
@@ -51,6 +52,7 @@ const EVIDENCE: EvidenceItem[] = [
     text: "申请材料包括成绩单、综测排名证明与个人陈述；逾期提交不予受理。",
     file_path: "ktem_app_data/user_data/files/学院奖学金评定办法.pdf",
     cited: true,
+    entity_row: false,
     spans: [],
   },
   {
@@ -60,13 +62,34 @@ const EVIDENCE: EvidenceItem[] = [
     file_name: "示例班级学年综测汇总表.xlsx",
     page: 2,
     type: "table",
-    score: 0.27,
-    vector_score: 0.31,
-    rerank_score: 0.27,
-    llm_score: 0.2,
+    // An entity-row promotion: retrieved by the row lookup, never reranked — the
+    // panel shows the "entity row match" chip instead of a 0% score (§5.32).
+    score: 0,
+    vector_score: -1,
+    rerank_score: null,
+    llm_score: null,
     text: "张同学：德育 28.5，智育 45.2，体育 18.0，合计 91.7，班级排名 3/41。",
     file_path: "ktem_app_data/user_data/files/示例班级学年综测汇总表.xlsx",
     cited: false,
+    entity_row: true,
+    spans: [],
+  },
+  {
+    // An ordinary retrieval candidate: visible only under "show all" (§5.32).
+    id: "ev-4",
+    index_id: "1",
+    file_id: "file-3",
+    file_name: "学院通知.pdf",
+    page: 1,
+    type: "text",
+    score: 0.12,
+    vector_score: 0.31,
+    rerank_score: 0.12,
+    llm_score: null,
+    text: "评奖材料请于 10 月 20 日前提交至学院办公室，逾期不再受理。",
+    file_path: "ktem_app_data/user_data/files/学院通知.pdf",
+    cited: false,
+    entity_row: false,
     spans: [],
   },
 ];
@@ -207,6 +230,9 @@ const SCHEMA: SettingsSchema = {
 
 let settings: Record<string, unknown> = { "reasoning.use": "simple", "reasoning.lang": "zh" };
 
+/** The account-level model choice, so mocking the resources switch is visible in `/meta`. */
+let currentModel = META.models.default;
+
 const delay = (ms = 120) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 export const mockApi = {
@@ -224,7 +250,15 @@ export const mockApi = {
   },
   async meta(): Promise<Meta> {
     await delay(80);
-    return META;
+    return { ...META, models: { ...META.models, default: currentModel } };
+  },
+  async setCurrentLlm(name: string): Promise<{ name: string }> {
+    await delay(60);
+    const pool = META.models.choices
+      .map((choice) => choice.value)
+      .filter((value) => value !== "");
+    currentModel = name && pool.includes(name) ? name : META.models.default;
+    return { name: currentModel };
   },
   async listConversations(): Promise<{ items: ConversationSummary[] }> {
     await delay(100);

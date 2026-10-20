@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pytest
 from kotaemon.base import Document
 
 from ktem.services.chat import ChatService
@@ -134,3 +135,26 @@ def test_suggest_name_uses_answer_language(monkeypatch):
 
     assert ChatService._suggest_name([["问", "答"]], "zh") == "中文标题"
     assert seen["lang"] == "Chinese"
+
+
+def test_build_pipeline_without_any_model_says_what_to_do(application, monkeypatch):
+    """A fresh install with no configured provider must not surface a raw error.
+
+    Presets with placeholder credentials are no longer seeded (§5.34), so the pool
+    can legitimately be empty; the chat should point the user at the resources page
+    instead of failing with upstream's "No models in pool".
+    """
+    from ktem.llms.manager import llms
+
+    monkeypatch.setattr(llms, "options", lambda: {})
+    service = ChatService(application)
+
+    with pytest.raises(ValueError) as excinfo:
+        service.build_pipeline(
+            settings={"reasoning.use": "simple"},
+            overrides={},
+            selection={},
+            state={},
+            user_id=1,
+        )
+    assert "模型资源" in str(excinfo.value)

@@ -146,13 +146,6 @@ function ChatSession({ conversationId }: ChatSessionProps) {
     setActiveCitation(null);
   }, [conversationId]);
 
-  useEffect(() => {
-    document.title = `${name} · citeask`;
-    return () => {
-      document.title = "citeask";
-    };
-  }, [name]);
-
   const lastAssistantIndex = useMemo(
     () => stream.messages.map((message) => message.role).lastIndexOf("assistant"),
     [stream.messages],

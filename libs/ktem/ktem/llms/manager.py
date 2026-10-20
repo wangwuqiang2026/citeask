@@ -7,6 +7,8 @@ from theflow.utils.modules import deserialize, import_dotted_string
 
 from kotaemon.llms import ChatLLM
 
+from ktem.utils.model_presets import sync_presets
+
 from .db import LLMTable, engine
 
 
@@ -19,19 +21,16 @@ class LLMManager:
         self._default: str = ""
         self._vendors: list[Type] = []
 
+        # Seed the models the deployment actually configured, and drop the vendor
+        # templates that still carry placeholder credentials — the resources page
+        # is the user's model pool, not a list of provider examples (§5.34).
         if hasattr(flowsettings, "KH_LLMS"):
-            for name, model in flowsettings.KH_LLMS.items():
-                with Session(engine) as session:
-                    stmt = select(LLMTable).where(LLMTable.name == name)
-                    result = session.execute(stmt)
-                    if not result.first():
-                        item = LLMTable(
-                            name=name,
-                            spec=model["spec"],
-                            default=model.get("default", False),
-                        )
-                        session.add(item)
-                        session.commit()
+            report = sync_presets(LLMTable, flowsettings.KH_LLMS)
+            if report["seeded"] or report["pruned"]:
+                print(
+                    "llm presets: "
+                    f"seeded={report['seeded']} pruned={report['pruned']}"
+                )
 
         self.load()
         self.load_vendors()

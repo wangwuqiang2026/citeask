@@ -1,6 +1,6 @@
 ## 1. 登录
 
-打开 <http://127.0.0.1:7860>，默认账号 `admin` / `admin`。
+打开 <http://127.0.0.1:7860>，默认账号 `admin` / `admin`——**首次部署请立刻在「设置」页改密**。
 登录使用 HttpOnly Cookie（`ktem_session`），刷新页面不会丢；「设置」页顶部可以改自己的密码。
 需要回滚到经典界面时，在 `.env` 里设 `KH_WEB_UI=0` 并重启，根路径会回到 Gradio，经典界面始终在 `/legacy/`。
 
@@ -27,7 +27,7 @@
 
 ## 4. 提问与引用
 
-1. 在聊天框输入问题，`@` 选择文件，`Ctrl/⌘+Enter` 发送。
+1. 在聊天框输入问题，用输入框下方的回形针选择文件（`@` 只是标记，不改变检索范围），`Ctrl/⌘+Enter` 发送。
 2. 回答流式返回；引用标记（上标数字，底层是 `【n】`）可点击，右侧证据抽屉会定位到文件、页码、片段和分数。
 3. 证据抽屉里可以搜索、看相关性条、打开原文（`/legacy/file=...#page=N`）。
 4. 没有可靠依据时，拒答闸门会直接说"知识库中没有回答这个问题所需的依据"，而不是让模型凭记忆编。
@@ -57,7 +57,7 @@
 
 ## 7. 给开发者
 
-- API 前缀 `/api/v1`，共 39 个接口；会话 Cookie 为 HMAC 签名的 HttpOnly Cookie。
+- API 前缀 `/api/v1`，共 43 个接口；会话 Cookie 为 HMAC 签名的 HttpOnly Cookie。
 - 路由只做鉴权/序列化，业务在 `ktem/services/*`，不 import gradio，可脱离 UI 单测。
 - 评测：`python tools/eval_retrieval.py --eval tools/eval/fixture-points.json`（公开 9 题）；
   私有 27 题用 `--corpus` 指向自己的语料。

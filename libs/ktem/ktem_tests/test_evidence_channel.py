@@ -68,7 +68,7 @@ def test_entity_row_chunks_are_flagged_and_carry_no_lexical_score():
     the payload used to show ``0.0`` for the chunk that actually names the queried
     person (MODIFICATIONS §5.32).
     """
-    promoted = make_doc("实践表.xlsx", "…王务强 32…", -1.0, entity_row=True)
+    promoted = make_doc("实践表.xlsx", "…李同学 32…", -1.0, entity_row=True)
     regular = make_doc("制度.pdf", "制度正文", 0.35, rerank_score=0.0)
 
     spans = {promoted.doc_id: [{"start": 0, "end": 2, "idx": None}]}

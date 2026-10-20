@@ -186,8 +186,9 @@ def resolve_selector_user_id(session_user_id, selector_user_id):
 
 - 它的既有约定是**零依赖纯函数测试**（直接 import `ktem.utils.*`，配 `@pytest.mark.parametrize`），
   不引入 Gradio / 数据库。因此本次把逻辑抽到 `ktem/utils/selector.py` 而不是直接测 UI 类。
-- CI（[.github/workflows/unit-test.yaml:113](.github/workflows/unit-test.yaml#L113)）
-  **只对 `libs/kotaemon` 执行 pytest**，`libs/ktem/ktem_tests/` 未被 CI 覆盖。
+- CI（[.github/workflows/tests.yaml](.github/workflows/tests.yaml)）
+  **当时只对 `libs/kotaemon` 执行 pytest**，`libs/ktem/ktem_tests/` 未被 CI 覆盖
+  （后来 ROADMAP A2 已把两者都纳入，工作流改名为 `tests.yaml`）。
 - `test_qa.py` 是上游自带、**无法收集**的用例（`from index import …` 解析不到），
   所以对整个目录执行 pytest 会直接中断；验证时按文件运行。
 - 另有一坑：应用**运行时**跑测试会因 sqlite / LanceDB 被占用而长时间无输出，
@@ -1108,7 +1109,7 @@ uv sync --python 3.10 --no-install-package llama-cpp-python
   - 会话标题生成、追问建议应跟随回答语言。
 - **必须在浏览器里看一次**（接口测试覆盖不到前端）：打开首页确认登录框出现、能登录，
   且浏览器控制台无 `SyntaxError`。这是 §3.5 那次「整站白屏」的唯一可靠发现方式。
-- 词条缓存：`python -m ktem.utils.i18n stats --language zh` 应显示 `336 entries`；
+- 词条缓存：`python -m ktem.utils.i18n stats --language zh` 应显示 `356 entries`；
   删除 `ktem_app_data/i18n/zh.json` 后首次启动仍是英文，需先跑 §3.7 的 build 命令重建。
 - **UI 视觉层（§5.24）**：
 
@@ -1320,7 +1321,7 @@ catalog = load_catalog("zh")
 .\.venv\Scripts\python.exe -m ktem.utils.i18n bundle --language zh   # 把用户词表同步进仓库
 ```
 
-验证：把用户词表路径指向不存在的文件（模拟全新 clone），合并后仍有 **336 条**，
+验证：把用户词表路径指向不存在的文件（模拟全新 clone），合并后仍有 **356 条**，
 `tr("[Page {}]")` → `[第 1 页]`、`tr("Relevance score")` → `相关性分数` 均正确 ✅
 
 > 注意：本机受限沙箱里 `bundle` 写 `libs/` 会被权限拒绝（低完整性进程不能写该目录），
@@ -2352,7 +2353,7 @@ SSE 事件：`start`（可带 `warning`）→ `token`/`reset` → `evidence`（�
   markdown + 快捷键。
 - [AccountCard.tsx](web/src/components/settings/AccountCard.tsx)：设置页顶部的「账户」卡片，
   当前密码 + 新密码 + 确认，前端只校验两次一致，其余规则交给后端。
-- 路由替换后 [ClassicPage.tsx](web/src/pages/ClassicPage.tsx) 与 [PageShell.tsx](web/src/components/app/PageShell.tsx)
+- 路由替换后 `ClassicPage.tsx`（`web/src/pages/`）与 `PageShell.tsx`（`web/src/components/app/`）
   不再被引用，已删除；`classic.*` 只保留仍被文件页使用的 `classic.open`。
 
 **验证**
@@ -2445,7 +2446,7 @@ SSE 事件：`start`（可带 `warning`）→ `token`/`reset` → `evidence`（�
 ### 5.31 标签页标题被对话名覆盖（2026-10-19）
 
 **现象**：新开对话并提问后，浏览器标签页标题从 `citeask` 变成
-「<自动生成的对话名> · citeask」（如「王务强班级查询 · citeask」）；换一个对话就换一次名字，
+「<自动生成的对话名> · citeask」（如「李同学班级查询 · citeask」）；换一个对话就换一次名字，
 多开标签时反而看不出这是哪个产品。
 
 **根因**：[ChatPage.tsx](web/src/pages/ChatPage.tsx) 里有一个 `useEffect` 把
@@ -2467,7 +2468,7 @@ SSE 事件：`start`（可带 `warning`）→ `token`/`reset` → `evidence`（�
 
 ### 5.32 证据面板：0% 却被引用、无关候选太多（2026-10-19）
 
-**现象**：问「王务强是哪个班的」，证据面板 13 条、其中 4 条标「已被引用」，但这些卡片的
+**现象**：问「李同学是哪个班的」，证据面板 13 条、其中 4 条标「已被引用」，但这些卡片的
 「相关性」显示 **0%**；同时列表里混着 Mathorcup 校赛名单这类与问题无关的文件。
 
 **定位**（直接读 `ktem_app_data/user_data/sql.db` 里该会话的 `evidence_history`）：
@@ -2746,3 +2747,99 @@ embedding/reranker（清掉会失去默认模型），且本次要求是对话�
 
 **注意**：向量切换是全局操作（重建所有索引），仅管理员可点；重建期间检索可能返回空结果（向量库
 已清空），页面文案已说明。MCP 是工具服务、不是模型池，没有「使用中/切换」概念，本次未加。
+
+### 5.37 收尾审计：两个 P0 与一批 P1（2026-10-20）
+
+**做法**：发布前做了一轮只读审计（前端、API/服务层、检索/索引核心三路独立进行），
+每条结论都回到源码复核行号；P0 的两条由两路审计各自独立发现，再逐行确认。
+审计范围是"会不会丢数据 / 会不会越权 / 用户能不能发现"，不做风格与重构。
+
+#### P0-a 重建索引失败会永久删除用户的原始上传
+
+**现象**：换向量模型或手动「重建索引」时，只要解析中途失败（embedding 超时/限额、
+loader 依赖缺失、磁盘写失败），文件就从列表消失且无法找回。
+
+**定位**：
+[services/files.py](libs/ktem/ktem/services/files.py) 的 `stream_paths` 调
+`pipeline.stream(items, reindex=reindex)`，**没有传 `keep_on_failure`**；而
+[pipelines.py](libs/ktem/ktem/index/file/pipelines.py) 的 `reindex=True` 分支先
+`delete_file()`（[`delete_file`](libs/ktem/ktem/index/file/pipelines.py) 会连
+`FSPath/<hash>.<ext>` 的磁盘副本一起 `unlink`）再 `store_file()`；失败时
+`keep_on_failure=False` 又把这次新建的行和新副本删掉。`stream_paths` 收尾还会
+`rmtree` scratch 目录——三份副本全没。修复路径（`repair.py`）与新的重建服务
+（`services/reindex.py`）都显式传了 `keep_on_failure=True`，只有 API 这条最常用的路径漏了。
+
+**实现**：`stream()` 把"决定这次写哪一行"抽成
+`_prepare_source_row(file_path, reindex) -> (file_id, created_here, reused_row)`：
+文件已索引且 `reindex` 时**复用原行**，只 `delete_chunks()`，不再删行、不再重存；
+`_handle_failed_indexing` 新增 `reused_row`，命中时只清半成品 chunk。
+这样失败与成功都不再动用户的上传字节，原内容哈希也不变。
+
+**连带修掉的 P1**：旧实现每次重建都给文件换新 uuid，而 `FileGroup.data["files"]`
+存的是 file id——切一次向量模型，所有分组里的 id 全部悬空（检索范围查不到 chunk，
+静默变成"无证据"）。复用主键后分组、引用与下载链接在同一文件重建后仍然有效。
+另在 `finish()` 里清掉 `note["error"]`：复用行会让上一次修复失败留下的 ⚠ 一直挂着。
+
+#### P0-b 私有索引可被跨用户读取
+
+**定位**：[services/chat.py](libs/ktem/ktem/services/chat.py) 把请求体
+`selection[<index>].file_ids` 原样传给 `get_retriever_pipelines`；
+[ui.py](libs/ktem/ktem/index/file/ui.py) 的 `get_selected_ids` 只把
+"本人可见 id"当 `all_file_ids` 算出来，而
+[selector.py](libs/ktem/ktem/utils/selector.py) 的 `resolve_selection` 在 `select` 模式下
+**直接回显客户端给的 id**；检索管线随后按 `source_id.in_(...)` 取块且无 user 过滤。
+于是任何登录用户带上他人的 file id（可从被设为公开的会话证据里拿到）就能读出私有索引内容。
+
+**实现**：`resolve_selection` 先把 `chosen` 与 `all_file_ids` 求交，非法 id 静默丢弃；
+求交为空时回退"本人全部文件"（保留 §5.16 对陈旧 id 的容忍，且永不越权）。
+
+#### P1 清单（逐条有测试或明确的手工验证记录）
+
+| 位置 | 问题 | 修法 |
+|---|---|---|
+| [services/conversations.py](libs/ktem/ktem/services/conversations.py) | 公开会话的 evidence 带 `file_path`（服务器绝对路径），前端拼成 `/legacy/file=`，Gradio 的 `/file=` 不校验登录 → 可绕过 API 读私有上传 | 非 owner 读取时逐条 `pop("file_path")` |
+| 同上 | `feedback` 用 `_can_read`，任何能看到公开会话的人都能往别人会话里写点赞 | 改 `_is_owner`，非 owner 403 |
+| [api/meta.py](libs/ktem/ktem/api/meta.py) | 推理方式/语言/引文风格的 default 取进程级默认，用户改过的设置被前端 override 顶掉 | 三处 default 改取 `SettingsService(app).load(user["id"])` |
+| [api/vendors.py](libs/ktem/ktem/api/vendors.py) | `GET /vendors/mcp` 把含 token/env 的配置发给任何登录用户 | 非管理员只返回 name |
+| 同上 | 可删除当前默认模型；删掉后索引 config 指向不存在的模型，全站 chat/上传 500 | 默认模型删除返回 409 |
+| [utils/model_presets.py](libs/ktem/ktem/utils/model_presets.py) | 播种时照抄预设的 `default: True`，旧库已有默认时会出现两个 default，`load()` 取最后一行 → 运行时别名翻到新模型 | 已有默认时新播种行强制 `default=False` |
+| [services/reindex.py](libs/ktem/ktem/services/reindex.py) | URL 源被记成"失败"，`reindex_job.failed` 永不归零 → 每次点同一模型都全量重建并报"部分失败" | 记 `skipped`，与 `failed` 分开计 |
+| [api/chat.py](libs/ktem/ktem/api/chat.py) + [services/chat.py](libs/ktem/ktem/services/chat.py) | 「停止生成」只断 SSE，后台线程继续跑完并把被放弃的一轮写入会话 | 传 `threading.Event`，迭代中与 `persist_turn` 前检查 |
+| [pipelines.py](libs/ktem/ktem/index/file/pipelines.py) | 实体行提升用 `score=-1` 的副本顶掉已检索到的同一 chunk，唯一 ≥ floor 的相似度丢失 → 本可回答的被闸门拒答 | 已检索的 chunk 保留原分，只打 `entity_row` 标记；未检索到的才用 -1 |
+
+**前端 P1**（组件行为，无自动化回归，逐条代码走查）：
+
+| 位置 | 问题 |
+|---|---|
+| [api.ts](web/src/lib/api.ts) | `tryListFiles` 只认 `items`，而 `/files` 返回 `rows` → 聊天里选文件永远空列表 |
+| [Composer.tsx](web/src/components/chat/Composer.tsx) | 无 `isComposing` 判断 → 中文输入法按 Enter 选词会把拼音直接发出去 |
+| [FilesPage.tsx](web/src/pages/FilesPage.tsx) | `window.open(...,"noopener")` 规范上返回 `null` → 每次下载成功也弹"下载失败" |
+| [use-chat-stream.ts](web/src/hooks/use-chat-stream.ts) | 流结束写缓存会触发同步 effect，把 error/suggestions/evidence 清掉；组件卸载不 abort，旧流继续跑并回写缓存 |
+| [api.ts](web/src/lib/api.ts) | 退出登录不清 localStorage 里的明文密码，`/legacy` 会拿它自动登录 |
+
+#### 文档与门禁
+
+- 新增 [tools/tests/test_docs_links.py](tools/tests/test_docs_links.py)：扫描全仓 Markdown 的
+  相对链接与 `#锚点`（按 GitHub 的 slug 规则），CI 的 `tools/tests` 会自动跑。它当场抓出 3 条断链
+  （已迁移的 `unit-test.yaml`、已删除的 `ClassicPage.tsx`/`PageShell.tsx`）和 1 个失效锚点（§5.10）。
+- 数字按实测重写：词表 **356**（原 336）、Python **445**（原 425）、API 契约 **67**（原 61）、
+  前端 **56**（原 48）、首屏 **274.40 kB** gzip（原 274.20）。§3 里"当时 336 条"的叙述保留原口径。
+- 脱敏回退修正：§5.31/§5.32 与 `test_evidence_channel.py` 里又出现了真实姓名，已按 §4 的约定
+  统一改回化名（李同学）。
+- README「测试」一节的首个命令补上 `-X utf8`：Windows 下 gradio 生成类型存根时按系统编码读
+  `ui.py`，含中文会 `UnicodeDecodeError` 直接中断收集（CI 是 Linux 不受影响）。
+
+#### 实测
+
+| 项目 | 结果 |
+|---|---|
+| 后端全量 | `445 passed`（修前 425），0 failed |
+| Web API 契约 | `67 tests collected`（修前 61） |
+| 前端 | `npm test` **56 passed**；typecheck / lint 干净；`npm run build` 通过（`index-BPH-u9Ki.js`，**274.40 kB** gzip） |
+| 词表 | `356 entries`；启动日志 `296 labels localized, 356 catalog entries, 13 missing` |
+| 文档链接 | `test_docs_links.py` 绿（断链 0） |
+
+**注意**：本轮的 P2/P3 未修，已集中写进 README「已知限制」并标注来源。其中两条建议下一轮
+单独排期：`repair.py` 的多索引线程共用一个 `repair_src` 目录（会 rmtree 掉别的线程正在解析的副本）、
+`_dry_index` 把"合法 0-chunk 文件"当成重建中断（导致每次点同一模型都全库重建）。
+

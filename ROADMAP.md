@@ -1,6 +1,6 @@
 # 演进路线：从一个"能跑通"的改造，到一个"可被检验"的项目
 
-> 文档状态：v2 · 2026-10-19 · 已收口到 48 个提交 / 343 个源文件改动；CI 绿；P0（发布证据）完成，P1（公开 60+ 题评测）仍待做。
+> 文档状态：v3 · 2026-10-20 · 已收口到 65 个提交 / 355 个源文件改动；CI 绿；P0（发布证据）完成，P1（公开 60+ 题评测）仍待做。
 
 这份文档回答四个问题：**现在这个项目值多少分、还差什么、按什么顺序补、每一条怎么验收。**
 
@@ -23,6 +23,9 @@
 | 工具链 | 换模型后的重建索引工具、评测脚本、启动入口 | `tools/reindex_corpus.py`、`tools/eval_retrieval.py`、`app.py` |
 | 测试 | **88 passed**，全部离线（不联网、不调模型） | 对话 14 + 选择器 10 + i18n 44 + MCP 13 + OCR 7 |
 | 体积治理 | 未用模型缓存 + 未使用 torch 清理 | 7.1 GB → **≈2.0 GB**（`MODIFICATIONS.md` §6.3） |
+
+> 本节数字是 2026-10-19 盘点口径；2026-10-20 收尾后的最新实测（445 用例 / 56 前端 / 356 条词条）
+> 见 §1.4 与 README「数字自证」。
 
 ### 1.2 差距（本节是整份路线图的靶子）
 
@@ -50,11 +53,11 @@
 
 | 计划项 | 状态 | 证据（命令 / 数字 / 文档） |
 |---|---|---|
-| A1 提交历史重构 + 自有远程 | ✅ 完成 | `origin/main` 与工作区一致；自 `v0.12.0` 起 48 个提交、343 个源文件改动；CI 最新 run success |
-| A2 CI 纳入 `ktem_tests` + 工具测试 + 覆盖率报告 | ✅ 完成 | `.github/workflows/tests.yaml`；Python 399 例 + 前端 43 例，最新 run success |
+| A1 提交历史重构 + 自有远程 | ✅ 完成 | `origin/main` 与工作区一致；自 `v0.12.0` 起 **64 个提交、354 个源文件改动**；CI 最新 run success |
+| A2 CI 纳入 `ktem_tests` + 工具测试 + 覆盖率报告 | ✅ 完成 | `.github/workflows/tests.yaml`；Python **445 例** + 前端 **56 例**，最新 run success |
 | A3 一键启动脚本 | ✅ 完成 | `start.bat`（双击入口，失败留窗 + 日志）+ `scripts/bootstrap_windows.ps1`（默认跳过 uv sync、`-ForceSync` 强制、端口就绪后自动开浏览器） |
 | A4 演示素材 | ◐ 本次执行中 | 已加 `KH_APP_DATA_DIR` 隔离 demo 数据；截图/GIF 用仓库自带虚构语料生成，不再拍真实文件 |
-| A5 数字自证表 | ✅ 完成 | README「数字自证」一节；已补 399/43、57 API、39 接口、272.11 kB 与公开 9 题 |
+| A5 数字自证表 | ✅ 完成 | README「数字自证」一节；已补 445/56、67 API、43 接口、274.40 kB 与公开 9 题 |
 | B1 评测协议升级 | ◐ 工具与公开 9 题完成，私有题库仍 27 题 | `--category` / `--scope` / `--rerank` / `--fail-under-hit1` / `--abstain-term-floor`、退出码 0/1/2、`tools/eval/README.md`、`tools/tests/test_eval_retrieval.py`；公开 9 题实测 Hit@1 **87.5%** / MRR **0.900**（`results-public.*`），私有 27 题不可由外部复现 |
 | B2 重排闭环 | ✅ 完成（本地词法重排，无模型） | 配置但不可用时自动回退；全库 Hit@3 85.2%→**88.9%**、MRR +0.015，P50 +24%（§5.9） |
 | B3 切块 A/B | ✅ 完成 | 512/64 默认；**Hit@1 55.6% → 88.9%、MRR 0.707 → 0.933**（§5.7） |
@@ -72,7 +75,7 @@
 | 表格列宽修复（追加） | ✅ 完成 | `column_widths` 裸数字被 Gradio 当像素 → 全部改百分比、文件表 `wrap=True`、完整档案进详情区（§5.18） |
 | M1–M3 前端迁移（追加） | ✅ 完成 | React 18 + TypeScript + Vite + FastAPI `/api/v1`；登录/聊天/文件/设置/资源/帮助全部可用；`/legacy` 回滚（§5.25–§5.28） |
 | M4 供应商与 MCP 编辑（追加） | ✅ 完成 | `/resources` 从 `describe()` 生成表单；LLM/向量/重排/MCP 增删改；API 套件 56→57（§5.29/§5.30） |
-| 全栈测试与构建（追加） | ✅ 完成 | Python 399（API 57）+ 前端 43；typecheck/lint 干净；首屏 JS 272.11 kB gzip |
+| 全栈测试与构建（追加） | ✅ 完成 | Python **445**（API 67）+ 前端 **56**；typecheck/lint 干净；首屏 JS **274.40 kB** gzip |
 
 ---
 
@@ -231,9 +234,9 @@ jobs:
 | 数字 | 命令 | 结果 |
 |---|---|---|
 | Hit@1 59.3% / MRR 0.702 | `python tools/eval_retrieval.py --eval tools/eval/zh-points-rules.json --out tools/eval/results.md --json tools/eval/results.json` | `tools/eval/results.json` |
-| 88 passed | `pytest libs/ktem/ktem_tests libs/kotaemon/tests/test_ocr_pdf_reader.py -q --ignore=libs/ktem/ktem_tests/test_qa.py` | 终端输出 / CI |
+| 445 passed | `pytest libs/ktem/ktem_tests libs/kotaemon/tests/test_ocr_pdf_reader.py libs/kotaemon/tests/test_pptx_reader.py tools/tests -q --ignore=libs/ktem/ktem_tests/test_qa.py`（Windows 加 `-X utf8`） | 终端输出 / CI |
 | 正文 209 → 2322 字符 | `python tools/reindex_corpus.py --match 积分细则` 后读 Source.note | 数据库 `ktem_app_data/user_data/sql.db` |
-| 336 条词条 | `python -m ktem.utils.i18n stats --language zh` | 终端输出 |
+| 356 条词条 | `python -m ktem.utils.i18n stats --language zh` | 终端输出 |
 
 **验收**：逐条在本机跑通；表里不出现任何无法复现的数字。
 
@@ -452,16 +455,16 @@ B5 可独立并行
 - [x] `git log --oneline -9` 每行可读，无 `wip/update/fix` 之类
 - [x] `git grep` 审计无真实 key；`.env`、`ktem_app_data/`、`*.db` 均未跟踪
 - [x] `LICENSE.txt` 保留（Apache-2.0）；新增 `NOTICE`；README 首屏讲交付内容，文末许可小节写上游归属
-- [x] CI 绿色 + badge 进 README（最新 `ad4743a` success）
-- [ ] README 首屏有截图与指标表；指标表里每个数字都能在 A5 表里找到命令
-- [ ] 文档链接与锚点全部可用（`MODIFICATIONS.md#...`、`tools/eval/README.md`）
-- [ ] 全新环境按一键启动脚本能起到登录页
-- [x] 停掉应用后，测试命令跑通（399 + 43）
-- [ ] 评测命令在公开 9 题与私有 27 题上各跑通一次
-- [ ] 内部文档已脱敏：机构名、文件名、专有信息不出现在任何将要推送的文件里（评测集里用 `--corpus` 覆盖真名）
-- [ ] 截图只拍聊天/文件/资源/帮助，不拍 provider 配置页；只用虚构 fixture 数据
-- [ ] 临时文件、实验脚本没有残留在仓库里（`tools/__pycache__` 等）
-- [ ] 简历里出现的每个数字，都能在 30 秒内演示其复现命令
+- [x] CI 绿色 + badge 进 README
+- [x] README 首屏有截图与指标表；指标表里每个数字都能在 A5 表里找到命令（2026-10-20 逐个复测）
+- [x] 文档链接与锚点全部可用 —— 由 `tools/tests/test_docs_links.py` 常驻守住（CI 的 `tools/tests` 会跑）
+- [ ] 全新环境按一键启动脚本能起到登录页（本轮未做全新 venv 复测；脚本本身未改）
+- [x] 停掉应用后，测试命令跑通（**445 + 56**）
+- [ ] 评测命令在公开 9 题与私有 27 题上各跑通一次（公开 9 题可跑通；私有 27 题语料未随仓库发布，本机不可复现）
+- [x] 内部文档已脱敏：机构名、文件名、专有信息不出现在任何将要推送的文件里（收尾时又发现 §5.31/§5.32 与一处测试 mock 出现真实姓名，已改回化名）
+- [ ] 截图只拍聊天/文件/资源/帮助，不拍 provider 配置页；只用虚构 fixture 数据（截图本轮未逐张复核）
+- [x] 临时文件、实验脚本没有残留在仓库里（收尾清掉了测试进程回退到仓库根目录产生的 `tmp*`）
+- [x] 简历里出现的每个数字，都能在 30 秒内演示其复现命令
 
 ---
 

@@ -27,12 +27,14 @@
 
 ## 这个仓库交付了什么
 
-不是"把开源项目跑起来"：仓库累计 **48 个提交、343 个源文件改动**（不含构建产物与 lock），围绕一条完整的文档问答链路做了四块工作：
+不是"把开源项目跑起来"：仓库累计 **65 个提交、355 个源文件改动**（`git rev-list --count HEAD`；
+`git diff --name-only v0.12.0..HEAD`；口径含本次收尾的文档提交），
+围绕一条完整的文档问答链路做了四块工作：
 
 - **数据入口**：修复默认配置下检索被静默跳过、扫描件正文未入库、`.docx` 索引失败三类缺陷；新增按页决策的 OCR 抽取器。
 - **检索与评测**：自建只跑检索层、零 token 成本的评测，用同一套题驱动切块、重排、拒答闸门和向量模型选型。
 - **全栈重构**：把单页应用替换为 React 18 + FastAPI `/api/v1`（43 个接口、SSE 流式、HttpOnly Cookie、管理员 RBAC），并保留 `/legacy` 回滚路径。
-- **工程化**：425 个 Python 用例 + 48 个前端单测进 CI、一键启动、`doctor` 自检、查询 trace 与 token 记账。
+- **工程化**：445 个 Python 用例 + 56 个前端单测进 CI、一键启动、`doctor` 自检、查询 trace 与 token 记账。
 
 逐条证据、定位过程和实测数字见 [MODIFICATIONS.md](MODIFICATIONS.md)。
 
@@ -44,15 +46,15 @@
 |---|---|
 | 修复**检索静默失效**：默认配置下召回恒为空，模型绕过文档凭记忆作答 | 同一条默认路径：修复前召回 0 条 → 修复后正确命中并带引用（[§2.5](MODIFICATIONS.md#25-验证证据)） |
 | 新增**扫描件 OCR 检索链路**：文字层只有标题时按页 OCR 后再入库 | 同一份 PDF 正文从 **209 字符 → 2322 字符**，问题「英语四六级加几分」得到「四级 +4 分 / 六级 +6 分」并引用 `[第 2 页]`（[§2.7](MODIFICATIONS.md#27-同类缺陷二扫描版-pdf-的正文根本没进索引)） |
-| 上游**无 i18n 机制**下做中文界面：译文不落源码 | **336** 条词条、**296** 处标签本地化，剩余 18 条为刻意保留的品牌/标识符（[§3](MODIFICATIONS.md#三界面汉化引入翻译库译文不入代码)） |
-| **全栈重构**：Gradio 单页 → React 18 + FastAPI `/api/v1` | **43** 个接口、SSE 流式、HttpOnly Cookie、管理员 RBAC；**61** 个 API 测试 + **48** 个前端单测；首屏 JS **274.20 kB** gzip；`KH_WEB_UI=0` 可回滚（[§5.25](MODIFICATIONS.md#525-第二代前端react-spa--fastapi2026-10-18) / [§5.29](MODIFICATIONS.md#529-m4-起步模型供应商与-mcp-的增删改2026-10-19)） |
+| 上游**无 i18n 机制**下做中文界面：译文不落源码 | **356** 条词条、**296** 处标签本地化，剩余 13 条为刻意保留的品牌/标识符（[§3](MODIFICATIONS.md#三界面汉化引入翻译库译文不入代码)） |
+| **全栈重构**：Gradio 单页 → React 18 + FastAPI `/api/v1` | **43** 个接口、SSE 流式、HttpOnly Cookie、管理员 RBAC；**67** 个 API 测试 + **56** 个前端单测；首屏 JS **274.40 kB** gzip；`KH_WEB_UI=0` 可回滚（[§5.25](MODIFICATIONS.md#525-第二代前端react-spa--fastapi2026-10-18) / [§5.29](MODIFICATIONS.md#529-m4-起步模型供应商与-mcp-的增删改2026-10-19)） |
 | 建立**检索评测**（只跑检索层，零 token 成本） | 私有 27 题 + 12 无答案：Hit@1 **59.3% → 88.9%**（单文件）、MRR 0.702 → **0.933**；公开 9 题可复现 Hit@1 **87.5%** / MRR **0.900**（[评测](#检索评测)） |
 | 让评测**在干净环境可复现** | 仓库自带 5 页示例语料 + 9 题配套题集 + 结果文件；配套单测保证"题目引用的页/事实"真的在那份语料里（`tools/tests/test_fixture_eval.py`） |
 | 向量模型**用评测选型**，而不是凭感觉 | 4 个候选模型横向对比，Hit@1 从 **36.7% → 60.0%**（30 题版本实测） |
 | 向量化可切换：**通义 API（默认）** 或 **本地 ONNX**（离线兜底） | 通义与本地 mpnet 指标相当（Hit@1 均 60.0%，30 题版本），前者省掉 1 GB 本地模型 |
-| **成本与延迟可量化**：默认关闭"每个召回块调一次 LLM 打分" | 1 次调用 / **3291 token**（关）vs 11 次 / **9043 token**（开）；检索 P50 约 **1.6 s**（[§5.10](MODIFICATIONS.md#510-成本与延迟每题的-token-与-p50p95)） |
+| **成本与延迟可量化**：默认关闭"每个召回块调一次 LLM 打分" | 1 次调用 / **3291 token**（关）vs 11 次 / **9043 token**（开）；检索 P50 约 **1.6 s**（[§5.10](MODIFICATIONS.md#510-成本延迟与查询-traceroadmap-c3--c4)） |
 
-自动化测试 **425 个 Python 用例 + 48 个前端单测**全绿，全部离线运行（不联网、不调用模型）；CI 每次 push 都会跑一遍。
+自动化测试 **445 个 Python 用例 + 56 个前端单测**全绿，全部离线运行（不联网、不调用模型）；CI 每次 push 都会跑一遍。
 
 ---
 
@@ -525,7 +527,9 @@ npm run build    # 产出到 web/dist（提交这份产物）
 
 ```powershell
 # 先停掉应用（共用 sqlite / LanceDB）
-.\.venv\Scripts\python.exe -m pytest libs\kotaemon\tests\test_ocr_pdf_reader.py `
+# `-X utf8` 不能省：Windows 下 gradio 生成类型存根时按系统编码（GBK）读组件源码，
+# 含中文的 ui.py 会直接 UnicodeDecodeError 导致收集中断；CI 是 Linux，默认 UTF-8。
+.\.venv\Scripts\python.exe -X utf8 -m pytest libs\kotaemon\tests\test_ocr_pdf_reader.py `
     libs\kotaemon\tests\test_pptx_reader.py `
     libs\ktem\ktem_tests tools\tests -q --ignore=libs\ktem\ktem_tests\test_qa.py
 ```
@@ -564,14 +568,15 @@ $env:HF_HUB_OFFLINE="1"; $env:TRANSFORMERS_OFFLINE="1"
 cd web; npm test; npm run typecheck; npm run lint
 ```
 
-实测：Python **425 passed**（其中 Web API 契约 61 例），前端 `npm test` **48 passed**；
+实测：Python **445 passed**（其中 Web API 契约 67 例），前端 `npm test` **56 passed**；
 typecheck / lint 均无告警。
 
-新增模块的本地覆盖率（`coverage run -m pytest … && coverage report`，实测 321 个用例）：
+新增模块的本地覆盖率（与上面那条全量命令同一批用例：`coverage run --source=libs/ktem/ktem,libs/kotaemon/kotaemon -m pytest … && coverage report --include="*/i18n.py,*/selector.py,*/routing.py,*/file_profile.py,*/usage.py,*/trace.py,*/local_lexical.py,*/pptx_loader.py,*/repair.py,*/abstain.py,*/ocr_pdf_loader.py"`，实测 445 个用例）：
 `abstain.py` 100% · `selector.py` 100% · `routing.py` 100% · `file_profile.py` 100% ·
 `llms/usage.py` 100% · `utils/trace.py` 98% · `rerankings/local_lexical.py` 98% ·
-`loaders/pptx_loader.py` 82% · `index/file/repair.py` 80%；`i18n.py` 与 `ocr_pdf_loader.py`
-的用例依赖 pytest 临时目录，需在 CI（Linux）上统计。
+`loaders/pptx_loader.py` 92% · `loaders/ocr_pdf_loader.py` 82% · `index/file/repair.py` 80% ·
+`utils/i18n.py` 73%（`i18n.py` 与 `ocr_pdf_loader.py` 的部分用例依赖 pytest 临时目录，
+在受限沙箱里可能被跳过，以 CI（Linux）的统计为准）。
 
 ---
 
@@ -589,11 +594,13 @@ README 里出现的每个数字都能用一条命令复现；"未测"就是未�
 | 拒答：无答案题 91.7% / 可答题误拒 0% | `python tools/eval_retrieval.py --eval tools/eval/zh-no-answer.json`（阈值见 `KH_ABSTAIN_SCORE_THRESHOLD`） | `tools/eval/zh-no-answer.json`、`MODIFICATIONS.md` §5.8 |
 | 每题成本：1 次调用 / 3291 token（关 `use_llm_reranking`）vs 11 次 / 9043 token（开） | `python tools/trace_report.py --trace <trace.jsonl>`（先设 `KH_QUERY_TRACE=1` 问几题） | 终端表格、`MODIFICATIONS.md` §5.10 |
 | 索引健康（文件数、块数、向量数、空块比例、配置是否真生效） | `python tools/doctor.py --json <临时路径>` | 终端表格；`--strict` 让 WARN 也返回非零 |
-| 词表 336 条 | `python -m ktem.utils.i18n stats --language zh` | 终端输出 |
+| 词表 356 条 | `python -m ktem.utils.i18n stats --language zh` | 终端输出（启动日志：`296 labels localized, 356 catalog entries, 13 missing`） |
 | 正文 209 → 2322 字符（扫描件 OCR） | `python tools/reindex_corpus.py --match "积分细则"` 后查 `Source.note` | `ktem_app_data/user_data/sql.db` |
-| 测试通过数：Python **425** / 前端 **48** | 上面「测试」一节的 pytest 命令；`cd web; npm test` | 终端 / `.github/workflows/tests.yaml`（CI） |
-| Web API 契约 **61** 例 / **43** 个接口 | `pytest libs\ktem\ktem_tests\test_api_*.py ...`；接口数：`grep -c '^@router\.' libs/ktem/ktem/api/*.py` | CI `tests` job；`libs/ktem/ktem/api/` |
-| 首屏 JS **274.20 kB** gzip | `cd web; npm run build` | 构建输出 `dist/assets/index-*.js` |
+| 测试通过数：Python **445** / 前端 **56** | 上面「测试」一节的 pytest 命令；`cd web; npm test` | 终端 / `.github/workflows/tests.yaml`（CI） |
+| Web API 契约 **67** 例 / **43** 个接口 | `.\.venv\Scripts\python.exe -X utf8 -m pytest libs\ktem\ktem_tests\test_api_auth_meta.py libs\ktem\ktem_tests\test_api_conversations.py libs\ktem\ktem_tests\test_api_chat.py libs\ktem\ktem_tests\test_api_files.py libs\ktem\ktem_tests\test_api_users.py libs\ktem\ktem_tests\test_api_help_resources.py libs\ktem\ktem_tests\test_api_vendors.py libs\ktem\ktem_tests\test_evidence_channel.py libs\ktem\ktem_tests\test_web_host.py --collect-only -q`；接口数：`grep -c '^@router\.' libs/ktem/ktem/api/*.py` | CI `tests` job；`libs/ktem/ktem/api/` |
+| 首屏 JS **274.40 kB** gzip | `cd web; npm run build` | 构建输出 `dist/assets/index-*.js` |
+| 提交 **65** 个 / 源文件改动 **355** 个 | `git rev-list --count HEAD`；`git diff --name-only v0.12.0..HEAD` | 首屏「这个仓库交付了什么」（口径：含本文档提交） |
+| 文档断链 **0** 条 | `python -X utf8 -m pytest tools/tests/test_docs_links.py -q` | CI 的 `tools/tests` job（收尾时新增的常驻门禁） |
 
 > `tools/doctor.py` 的输出包含本机语料文件名，**不要把它提交进仓库**；
 > 需要留档时写到仓库外，或先脱敏。
@@ -666,6 +673,20 @@ README 里出现的每个数字都能用一条命令复现；"未测"就是未�
 - **管理员的索引新增/删除仍留在 `/legacy`**：这类操作会写库、需要重启并依赖失败回滚，新界面提供
   只读索引视图与文件级管理；`KH_WEB_UI=0` 是整站回滚开关。
 - **单机单用户定位**：没有多租户、限流、高并发与生产监控；`doctor`/trace 面向本机排障，不是线上观测平台。
+- **收尾审计发现但本轮未修的 P2/P3**（[§5.37](MODIFICATIONS.md#537-收尾审计两个-p0-与一批-p12026-10-20)，按影响排序）：
+  - 启动自愈（[repair.py](libs/ktem/ktem/index/file/repair.py)）每个索引一个线程，却共用一个
+    `repair_src` 目录并在结束时 `rmtree`——两个索引同时自愈时会删掉对方正在解析的副本；
+  - [`_dry_index`](libs/ktem/ktem/api/resources.py) 把"有文件、无 chunk"一律当"重建中断"，而合法的
+    空文件本来就是 0 chunk：这类语料会让"同一模型"永远不 no-op、每次点击都全库重建；
+  - 文件档案的向量缓存是进程级（`_PROFILE_VECTORS`），切向量模型后不失效：同维度模型会拿旧坐标打分，
+    不同维度则路由静默关闭到重启为止；
+  - `quick_index_mode` 把 embedding 放进后台线程后立刻报成功，线程里的异常无人接住——限额/网络失败
+    会留下"有文档、无向量"的幽灵文件（§2.10 修过的问题在这一模式下仍可复发）；
+  - 新的 `/api/v1` 没有接限流：`RATE_LIMIT` 只对 `/legacy` 的经典界面生效，SPA 可无限触发对话与上传；
+  - 会话 `data_source` 是整列 JSON 读-改-写，没有版本号或行锁：两个标签页同时提问会丢掉其中一轮；
+  - `FileIndex._selector_ui` 只在 Gradio 页面构建时初始化，纯 FastAPI 部署（不 `app.make()`）会在
+    检索时 `AttributeError`；
+  - 默认管理员口令仍是 `admin/admin`（[flowsettings.py](flowsettings.py)），且没有首次登录强制改密。
 - 词表是机器翻译产物，个别术语（如 `Citation style`）可能需要人工润色，
   改 `ktem_app_data/i18n/zh.json` 即可覆盖仓库默认值。
 

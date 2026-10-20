@@ -12,7 +12,16 @@ TEST_MCP = "test_api_mcp"
 
 
 def _delete(client, kind: str, name: str) -> None:
-    client.delete(f"/api/v1/vendors/{kind}/{name}")
+    response = client.delete(f"/api/v1/vendors/{kind}/{name}")
+    # 404 means the row is already gone (a test renamed it); anything other than
+    # 204/404 would leave the row behind and poison the next pytest run.
+    assert response.status_code in (204, 404), response.text
+
+
+def _restore_defaults(client, names: list[str]) -> None:
+    for name in names:
+        response = client.patch(f"/api/v1/vendors/llms/{name}", json={"default": True})
+        assert response.status_code == 200, response.text
 
 
 def _default_names(client) -> list[str]:
@@ -89,8 +98,7 @@ def test_llm_crud_round_trip(logged_in):
     finally:
         # Restore the previous default first: a default model cannot be deleted
         # (§5.35), so the test rows must be non-default before cleanup.
-        for name in before:
-            logged_in.patch(f"/api/v1/vendors/llms/{name}", json={"default": True})
+        _restore_defaults(logged_in, before)
         _delete(logged_in, "llms", TEST_LLM)
         _delete(logged_in, "llms", f"{TEST_LLM}_renamed")
 
@@ -114,9 +122,12 @@ def test_setting_a_default_model_moves_the_flag_then_restores_it(logged_in):
         assert defaults == [TEST_LLM], "exactly one default after promoting a model"
     finally:
         # Move the default back before removing the promoted row: deleting the
-        # pool default is refused with 409 now, so the order matters.
-        for name in before:
-            logged_in.patch(f"/api/v1/vendors/llms/{name}", json={"default": True})
+        # pool default is refused with 409 now, so the order matters. A fresh
+        # installation has no default row at all, so there is nothing to restore
+        # there: demote the row this test promoted instead.
+        _restore_defaults(logged_in, before)
+        if not before:
+            logged_in.patch(f"/api/v1/vendors/llms/{TEST_LLM}", json={"default": False})
         _delete(logged_in, "llms", TEST_LLM)
 
 
@@ -268,3 +279,35 @@ def test_deleting_the_default_model_is_refused(logged_in, monkeypatch):
     assert response.status_code == 409, response.text
     assert "默认模型" in response.json()["detail"]
     assert deleted == [], "the default model must not reach the manager"
+
+
+def test_a_model_is_not_protected_when_no_default_is_marked(logged_in, monkeypatch):
+    """A pool with no flagged default has no "current default" to protect.
+
+    ``get_default_name()`` falls back to a random model in that state. Using it as
+    the delete guard made the only model of a fresh installation undeletable: the
+    resources page answered 409 "请先切换" with nothing to switch to, and the
+    vendor tests could not clean up after themselves on the CI database (the
+    second pytest run then failed with "名称已存在").
+    """
+    from ktem.services import vendors as service
+
+    deleted: list[str] = []
+
+    class FakeManager:
+        def info(self):
+            return {"only-model": {"name": "only-model", "spec": {}, "default": False}}
+
+        def get_default_name(self):
+            # random fallback of a pool where no row carries the default flag
+            return "only-model"
+
+        def delete(self, name):
+            deleted.append(name)
+
+    monkeypatch.setattr(service, "_manager", lambda kind: FakeManager())
+
+    response = logged_in.delete("/api/v1/vendors/llms/only-model")
+
+    assert response.status_code == 204, response.text
+    assert deleted == ["only-model"], "the row must reach the manager"

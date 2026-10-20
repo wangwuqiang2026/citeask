@@ -125,19 +125,18 @@ def update_entry(
 
 
 def _is_default_model(kind: str, name: str) -> bool:
-    """Whether ``name`` is the model the app currently runs on by default."""
+    """Whether ``name`` is the model row flagged as the pool default.
+
+    Only the stored flag counts here. ``get_default_name()`` must not be used as
+    the guard: when no row carries the flag it falls back to a *random* model, so
+    a pool with a single model would refuse to delete it ("该模型是当前默认模型"
+    with nothing to switch to) and a larger pool would accept or refuse the same
+    deletion depending on a coin flip.
+    """
     if kind == "mcp":
         return False
-    manager = service._manager(kind)  # noqa: SLF001 - same package, one manager
-    info = manager.info()
-    if not info:
-        return False
-    if bool((info.get(name) or {}).get("default")):
-        return True
-    try:
-        return manager.get_default_name() == name
-    except Exception:  # noqa: BLE001 - an empty pool has no default to compare
-        return False
+    info = service._manager(kind).info()  # noqa: SLF001 - same package, one manager
+    return bool((info.get(name) or {}).get("default"))
 
 
 @router.delete("/{kind}/{name}", status_code=204)

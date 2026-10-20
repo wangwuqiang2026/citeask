@@ -112,6 +112,44 @@ export function formatBytes(bytes: number): string {
   return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[unit]}`;
 }
 
+export interface FileOptionRow {
+  id: string;
+  file_name: string;
+}
+
+function fileRowsOf(payload: unknown): unknown[] {
+  if (Array.isArray(payload)) return payload;
+  if (payload && typeof payload === "object") {
+    const record = payload as Record<string, unknown>;
+    if (Array.isArray(record.rows)) return record.rows;
+    if (Array.isArray(record.items)) return record.items;
+  }
+  return [];
+}
+
+/**
+ * Rows of `GET /files` as the composer's file picker wants them.
+ *
+ * The endpoint answers ``{index_id, columns, rows}`` — the same envelope as the
+ * table — so a parser that only accepts an array or ``items`` silently saw an
+ * empty list. ``rows`` is tried first, then the legacy shapes (``items`` array,
+ * bare array). Column names are historical aliases: ``file_id`` and ``name`` in
+ * today's rows, ``id``/``file_name``/``filename`` in older payloads.
+ */
+export function parseFileRows(payload: unknown): FileOptionRow[] {
+  const files: FileOptionRow[] = [];
+  for (const row of fileRowsOf(payload)) {
+    if (!row || typeof row !== "object" || Array.isArray(row)) continue;
+    const record = row as Record<string, unknown>;
+    const rawId = record.id ?? record.file_id ?? "";
+    const id = String(rawId);
+    if (id === "") continue;
+    const rawName = record.file_name ?? record.name ?? record.filename ?? rawId;
+    files.push({ id, file_name: String(rawName) });
+  }
+  return files;
+}
+
 export interface UploadFormInput {
   files: File[];
   /** One URL per line; empty lines are dropped by the backend. */

@@ -1,4 +1,4 @@
-import { parseUploadEvent } from "./files";
+import { parseFileRows, parseUploadEvent } from "./files";
 import { parseJsonData, readSse } from "./sse";
 import type {
   ChatMessage,
@@ -656,9 +656,9 @@ export const api = {
   },
 
   /**
-   * Best effort: the file endpoints arrive with M2. `null` means "not available
-   * yet", which the composer renders as a link to the classic UI instead of an
-   * error.
+   * Best effort: `GET /files` answers `{index_id, columns, rows}`; older builds
+   * used a bare list or `{items}`. `null` means "endpoint not available yet"
+   * (404/405/501), which the composer renders as a link to the classic UI.
    */
   async tryListFiles(indexId?: string | number): Promise<FileOption[] | null> {
     if (USE_MOCK) return (await import("./mock")).mockApi.listFiles();
@@ -667,17 +667,8 @@ export const api = {
         ? `?index_id=${encodeURIComponent(String(indexId))}`
         : "";
     try {
-      const data = await request<
-        { items?: Array<Record<string, unknown>> } | Array<Record<string, unknown>>
-      >(`/api/v1/files${query}`);
-      const rows = Array.isArray(data) ? data : data?.items;
-      if (!Array.isArray(rows)) return [];
-      return rows
-        .map((row) => ({
-          id: String(row.id ?? row.file_id ?? ""),
-          file_name: String(row.file_name ?? row.name ?? row.filename ?? row.id ?? ""),
-        }))
-        .filter((file) => file.id !== "");
+      const data = await request<unknown>(`/api/v1/files${query}`);
+      return parseFileRows(data);
     } catch (error) {
       if (error instanceof ApiError && [404, 405, 501].includes(error.status)) {
         return null;

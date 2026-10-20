@@ -7,6 +7,7 @@ import {
   formatBytes,
   formatTokens,
   isLoaderWarning,
+  parseFileRows,
   parseUploadEvent,
 } from "./files.ts";
 
@@ -85,6 +86,61 @@ describe("buildUploadForm", () => {
     assert.equal(form.get("index_id"), null);
     assert.equal(form.get("urls"), null);
     assert.equal(form.get("reindex"), "false");
+  });
+});
+
+describe("parseFileRows", () => {
+  it("parses the /files response shape: {rows} with file_id/name columns", () => {
+    assert.deepEqual(
+      parseFileRows({
+        index_id: "1",
+        columns: ["file_id", "name"],
+        rows: [
+          { file_id: "a", name: "a.pdf" },
+          { file_id: "b", name: "b.docx" },
+        ],
+      }),
+      [
+        { id: "a", file_name: "a.pdf" },
+        { id: "b", file_name: "b.docx" },
+      ],
+    );
+  });
+
+  it("also accepts a bare array and the legacy {items} envelope", () => {
+    assert.deepEqual(parseFileRows([{ id: "x", file_name: "x.txt" }]), [
+      { id: "x", file_name: "x.txt" },
+    ]);
+    assert.deepEqual(parseFileRows({ items: [{ id: "y", name: "y.txt" }] }), [
+      { id: "y", file_name: "y.txt" },
+    ]);
+  });
+
+  it("maps the id/name aliases and falls back to the id as the name", () => {
+    assert.deepEqual(
+      parseFileRows({
+        rows: [
+          { id: "1", filename: "one.pdf" },
+          { file_id: "2", file_name: "two.pdf" },
+          { file_id: "3" },
+        ],
+      }),
+      [
+        { id: "1", file_name: "one.pdf" },
+        { id: "2", file_name: "two.pdf" },
+        { id: "3", file_name: "3" },
+      ],
+    );
+  });
+
+  it("drops rows without an id and returns [] for unknown payloads", () => {
+    assert.deepEqual(
+      parseFileRows({ rows: [{ name: "no-id.pdf" }, null, { file_id: "keep" }] }),
+      [{ id: "keep", file_name: "keep" }],
+    );
+    assert.deepEqual(parseFileRows(null), []);
+    assert.deepEqual(parseFileRows({ rows: "nope" }), []);
+    assert.deepEqual(parseFileRows({ unexpected: [] }), []);
   });
 });
 

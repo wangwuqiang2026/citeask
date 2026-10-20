@@ -72,22 +72,14 @@ uv sync --python 3.10 --no-install-package llama-cpp-python
 
 ## 它是怎么工作的
 
-```
-浏览器
-├─ /            React 18 + TypeScript + Vite（web/dist 已提交，运行时不需 Node）
-├─ /api/v1/*    FastAPI：JSON + SSE（ktem/api → ktem/services，43 个接口）
-└─ /legacy/     经典 Gradio 界面（迁移期回滚；KH_WEB_UI=0 时回到根路径）
+| 层 | 做什么 |
+|---|---|
+| **入口** | `/` React SPA（构建产物已提交，运行时不需要 Node）· `/api/v1` FastAPI，43 个接口，JSON + SSE 流式 · `/legacy` 经典 Gradio 界面（`KH_WEB_UI=0` 时回到根路径，可整体回滚） |
+| **索引链路** | 抽取（PDF / Office / 网页）→ 扫描页 OCR（按页决策，文字层够就不 OCR）→ 分块 512 / 64 token → 向量化（通义 `text-embedding-v3`，或本地 FastEmbed） |
+| **检索链路** | 向量召回 + 中文全文（n-gram）→ 本地词法重排 → 按文件、按实体行补齐 → 分数闸门（没有依据就拒答，不调模型） |
+| **存储** | LanceDB（文档）+ Chroma（向量）+ SQLite（会话 / 索引元数据），全部在 `ktem_app_data/` 下，可随 `KH_APP_DATA_DIR` 整体迁移 |
 
-        索引                           检索
-┌──────────────────────┐      ┌──────────────────────────────┐
-│ 抽取：PDF/Office/网页  │      │ 向量召回（通义 / 本地 FastEmbed）│
-│  · 扫描页 → 本地 OCR   │ ───▶ │ + 中文全文（n-gram）            │
-│ 分块 512/64（token）   │      │ + 本地词法重排 + 按文件/按行补齐  │
-│ 向量化 → LanceDB/Chroma│      │ + 分数闸门（无依据则拒答）        │
-└──────────────────────┘      └──────────────────────────────┘
-```
-
-路由只做鉴权、参数校验与序列化；业务在 `ktem/services/*`，不 import gradio，所以能脱离 UI 单测。
+接口层只做鉴权、参数校验与序列化；业务在 `ktem/services/*`，不 import gradio，所以上面每条链路都能脱离 UI 单测。
 
 ## 效果与评测
 

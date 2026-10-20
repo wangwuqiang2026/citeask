@@ -125,3 +125,25 @@ export function clampText(text: string, max = 240): string {
   const clean = text.replace(/\s+/g, " ").trim();
   return clean.length > max ? `${clean.slice(0, max).trimEnd()}…` : clean;
 }
+
+/**
+ * Whether a composer keydown sends the message.
+ *
+ * Enter sends unless Shift is held; Ctrl/Meta+Enter is an explicit shortcut and
+ * keeps working with Shift, as the old inline handler did. While an IME is
+ * composing, Enter picks a candidate — sending there would swallow the word
+ * being typed. Chrome/Firefox set ``isComposing``; older WebKit only bumps
+ * ``keyCode`` to the 229 sentinel.
+ */
+export function shouldSubmitOnEnter(event: {
+  key: string;
+  shiftKey?: boolean;
+  ctrlKey?: boolean;
+  metaKey?: boolean;
+  isComposing?: boolean;
+  keyCode?: number;
+}): boolean {
+  if (event.isComposing === true || event.keyCode === 229) return false;
+  if (event.key !== "Enter") return false;
+  return event.ctrlKey === true || event.metaKey === true || event.shiftKey !== true;
+}

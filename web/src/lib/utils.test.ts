@@ -7,6 +7,7 @@ import {
   isRelevantEvidence,
   legacyFileUrl,
   relevancePercent,
+  shouldSubmitOnEnter,
 } from "./utils.ts";
 
 function conversation(id: string, date: string): ConversationSummary {
@@ -105,6 +106,36 @@ describe("isRelevantEvidence", () => {
     // A full-text-only hit in a new payload is not an entity row and stays a candidate.
     assert.equal(
       isRelevantEvidence({ cited: false, entity_row: false, vector_score: -1 }),
+      false,
+    );
+  });
+});
+
+describe("shouldSubmitOnEnter", () => {
+  it("submits on a plain Enter", () => {
+    assert.equal(shouldSubmitOnEnter({ key: "Enter" }), true);
+    assert.equal(shouldSubmitOnEnter({ key: "Enter", shiftKey: false }), true);
+  });
+
+  it("does not submit on Shift+Enter or any other key", () => {
+    assert.equal(shouldSubmitOnEnter({ key: "Enter", shiftKey: true }), false);
+    assert.equal(shouldSubmitOnEnter({ key: "a" }), false);
+    assert.equal(shouldSubmitOnEnter({ key: "Escape" }), false);
+  });
+
+  it("keeps Ctrl/Meta+Enter as a send shortcut, as the old onKeyDown did", () => {
+    assert.equal(shouldSubmitOnEnter({ key: "Enter", ctrlKey: true }), true);
+    assert.equal(shouldSubmitOnEnter({ key: "Enter", metaKey: true }), true);
+    // The old first branch did not look at Shift, so Ctrl+Shift+Enter also sent.
+    assert.equal(shouldSubmitOnEnter({ key: "Enter", ctrlKey: true, shiftKey: true }), true);
+  });
+
+  it("never submits while an IME is composing", () => {
+    assert.equal(shouldSubmitOnEnter({ key: "Enter", isComposing: true }), false);
+    // Safari reports the 229 sentinel instead of isComposing.
+    assert.equal(shouldSubmitOnEnter({ key: "Enter", keyCode: 229 }), false);
+    assert.equal(
+      shouldSubmitOnEnter({ key: "Enter", keyCode: 229, ctrlKey: true }),
       false,
     );
   });

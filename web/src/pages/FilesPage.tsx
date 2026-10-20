@@ -72,8 +72,10 @@ export function FilesPage() {
   const groupCount = groups.data?.items.length ?? 0;
 
   const onDownload = (row: FileRow) => {
-    const opened = window.open(api.downloadFileUrl(row.file_id), "_blank", "noopener");
-    if (!opened) toast.error(t("files.downloadFailed"));
+    // `noopener` forces a null return by spec, so the result says nothing about
+    // success; the download endpoint is best-effort and errors show up in the UI
+    // only when the request itself fails.
+    void window.open(api.downloadFileUrl(row.file_id), "_blank", "noopener");
   };
 
   const onReindex = async (row: FileRow) => {

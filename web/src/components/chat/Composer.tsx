@@ -25,7 +25,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { FileOption } from "@/lib/api";
 import { useT } from "@/lib/i18n";
-import { cn } from "@/lib/utils";
+import { cn, shouldSubmitOnEnter } from "@/lib/utils";
 
 const MENTION_PATTERN = /@(?:"([^"]+)"|(\S+))/g;
 
@@ -138,15 +138,11 @@ export function Composer({
   };
 
   const onKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-      event.preventDefault();
-      submit();
-      return;
-    }
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      submit();
-    }
+    // An IME uses Enter to confirm a candidate; sending would swallow the word.
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+    if (!shouldSubmitOnEnter(event)) return;
+    event.preventDefault();
+    submit();
   };
 
   const onDrop = (event: React.DragEvent<HTMLDivElement>) => {

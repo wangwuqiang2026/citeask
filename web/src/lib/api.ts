@@ -264,6 +264,14 @@ export const api = {
   },
 
   async logout(): Promise<void> {
+    // The classic UI's autologin reads these two keys; clear them so signing out
+    // is not undone by the legacy login redirect. Private mode can refuse storage.
+    try {
+      window.localStorage.removeItem("username");
+      window.localStorage.removeItem("password");
+    } catch {
+      /* storage unavailable: nothing to clear */
+    }
     if (USE_MOCK) return (await import("./mock")).mockApi.logout();
     await request<void>("/api/v1/auth/logout", { method: "POST" });
   },

@@ -294,8 +294,23 @@ def test_promoted_rows_come_first():
 
     merged = DocumentRetrievalPipeline._promote_entity_rows(ranked, [row])
 
-    assert merged[0] is row
+    # The chunk retrieval already returned keeps its identity and its score: a
+    # promoted row replaced it with the NO_SIMILARITY copy, so the only score above
+    # the abstain floor disappeared and the question was refused (§5.37).
+    assert merged[0] is ranked[1]
+    assert merged[0].score == 0.35
+    assert merged[0].metadata["entity_row"] is True
     assert [doc.metadata["file_id"] for doc in merged] == ["grades", "notice"]
+
+
+def test_a_row_chunk_retrieval_did_not_return_keeps_the_no_similarity_marker():
+    ranked = [retrieved("notice", 0.49)]
+    row = retrieved("grades", -1.0)
+
+    merged = DocumentRetrievalPipeline._promote_entity_rows(ranked, [row])
+
+    assert merged[0] is row
+    assert merged[0].score == -1.0
 
 
 def test_a_chunk_that_is_already_in_the_context_is_not_duplicated():
@@ -306,7 +321,8 @@ def test_a_chunk_that_is_already_in_the_context_is_not_duplicated():
     merged = DocumentRetrievalPipeline._promote_entity_rows(ranked, [row])
 
     assert len(merged) == 2
-    assert merged[0] is row
+    assert merged[0] is ranked[0]
+    assert merged[0].score == 0.35
 
 
 def test_without_rows_the_ranking_is_untouched():

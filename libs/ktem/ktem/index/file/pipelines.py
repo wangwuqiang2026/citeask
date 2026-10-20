@@ -682,11 +682,28 @@ class DocumentRetrievalPipeline(BaseFileIndexRetriever):
     def _promote_entity_rows(
         docs: list[RetrievedDocument], row_docs: list[RetrievedDocument]
     ) -> list[RetrievedDocument]:
-        """Put the entity rows first, without duplicating a chunk already there."""
+        """Put the entity rows first, without duplicating or degrading a chunk.
+
+        A row chunk is usually also a vector hit. Promoting the ``NO_SIMILARITY``
+        copy over that hit dropped the only score above the abstain floor, so a
+        question the corpus answers was refused — the entity term never got the
+        chance to lower the bar (MODIFICATIONS §5.37). The retrieved chunk keeps its
+        score and only gains the ``entity_row`` flag; the marker copy is used for a
+        chunk retrieval did not return.
+        """
         if not row_docs:
             return docs
-        promoted = {doc.doc_id for doc in row_docs}
-        return list(row_docs) + [doc for doc in docs if doc.doc_id not in promoted]
+        retrieved = {doc.doc_id: doc for doc in docs}
+        promoted: list[RetrievedDocument] = []
+        for row_doc in row_docs:
+            original = retrieved.get(row_doc.doc_id)
+            if original is None:
+                promoted.append(row_doc)
+                continue
+            original.metadata = {**(original.metadata or {}), "entity_row": True}
+            promoted.append(original)
+        promoted_ids = {doc.doc_id for doc in promoted}
+        return promoted + [doc for doc in docs if doc.doc_id not in promoted_ids]
 
     def generate_relevant_scores(
         self, query: str, documents: list[RetrievedDocument]

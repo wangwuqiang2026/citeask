@@ -8,8 +8,6 @@ Document QA with OCR-aware ingestion, page-level citations, and an evaluated ret
 
 ![演示：登录 → 上传文档 → 等待索引 → 提问 → 流式回答带引用 → 点击引用定位到证据页 → 查看模型池](docs/images/demo.gif)
 
-<sub>45 秒真实操作，非截图拼接：本机 DeepSeek 对话 + 通义向量，语料是仓库自带的 5 页虚构 PPTX。[MP4 版](docs/images/demo.mp4)；界面文案为中文，`KH_UI_LANGUAGE=en` 可切英文。</sub>
-
 ---
 
 ## 它能做什么

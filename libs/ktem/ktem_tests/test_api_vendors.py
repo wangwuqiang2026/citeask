@@ -87,10 +87,12 @@ def test_llm_crud_round_trip(logged_in):
         # the vendor type survives the parameter merge
         assert renamed["spec"]["__type__"].endswith("ChatOpenAI")
     finally:
+        # Restore the previous default first: a default model cannot be deleted
+        # (§5.35), so the test rows must be non-default before cleanup.
+        for name in before:
+            logged_in.patch(f"/api/v1/vendors/llms/{name}", json={"default": True})
         _delete(logged_in, "llms", TEST_LLM)
         _delete(logged_in, "llms", f"{TEST_LLM}_renamed")
-        for name in before:  # restore whatever was default before the test
-            logged_in.patch(f"/api/v1/vendors/llms/{name}", json={"default": True})
 
 
 def test_setting_a_default_model_moves_the_flag_then_restores_it(logged_in):
@@ -111,9 +113,11 @@ def test_setting_a_default_model_moves_the_flag_then_restores_it(logged_in):
         defaults = _default_names(logged_in)
         assert defaults == [TEST_LLM], "exactly one default after promoting a model"
     finally:
-        _delete(logged_in, "llms", TEST_LLM)
+        # Move the default back before removing the promoted row: deleting the
+        # pool default is refused with 409 now, so the order matters.
         for name in before:
             logged_in.patch(f"/api/v1/vendors/llms/{name}", json={"default": True})
+        _delete(logged_in, "llms", TEST_LLM)
 
 
 def test_delete_missing_entry_is_a_404(logged_in):

@@ -355,7 +355,7 @@ def test_a_failed_upload_leaves_no_phantom_file():
         def delete_chunks(self, file_id):
             self.dropped.append(file_id)
 
-    def attempt(*, created_here, keep_on_failure):
+    def attempt(*, created_here, keep_on_failure, reused_row=False):
         fake = _FakeSelf()
         IndexPipeline._handle_failed_indexing(
             fake,
@@ -364,6 +364,7 @@ def test_a_failed_upload_leaves_no_phantom_file():
             file_name="orphan.xls",
             error=RuntimeError("Missing optional dependency 'xlrd'"),
             created_here=created_here,
+            reused_row=reused_row,
             keep_on_failure=keep_on_failure,
         )
         return fake.deleted, fake.dropped
@@ -375,3 +376,8 @@ def test_a_failed_upload_leaves_no_phantom_file():
     # the startup repair retries an existing row: keep it, but drop the partial
     # chunks so the next retry does not write 10k documents on top of 10k
     assert attempt(created_here=True, keep_on_failure=True) == ([], ["source-1"])
+    # a reindex reuses the row (§5.37): the user's upload must survive the failure
+    assert attempt(created_here=False, keep_on_failure=False, reused_row=True) == (
+        [],
+        ["source-1"],
+    )

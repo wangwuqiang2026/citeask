@@ -1066,6 +1066,10 @@ class IndexPipeline(BaseComponent):
                 item.note["tokens"] = sum([len(token_func(doc.text)) for doc in docs])
 
             # populate the note
+            # A reindex reuses the row (§5.37), so an error recorded by an earlier
+            # failed repair would otherwise keep the file flagged after it healed.
+            if isinstance(item.note, dict):
+                item.note.pop("error", None)
             item.note["loader"] = self.get_from_path("loader").__class__.__name__
             if profile_text:
                 # what this file is about, so a question can be routed to it without
@@ -1139,6 +1143,41 @@ class IndexPipeline(BaseComponent):
     ) -> tuple[str, list[Document]]:
         raise NotImplementedError
 
+    def _prepare_source_row(
+        self, file_path: str | Path, reindex: bool
+    ) -> tuple[str, bool, bool]:
+        """Resolve (or create) the source row this run indexes into.
+
+        Returns ``(file_id, created_here, reused_row)``.
+
+        Re-indexing reuses the row and the stored copy of the file that is already
+        indexed. Deleting the row first — the old behaviour — meant the upload and
+        the id disappeared together when the re-parse failed, and every successful
+        rebuild handed the file a new id, so file groups and history that named the
+        old one dangled (MODIFICATIONS §5.36 rebuilds every file when the embedding
+        model changes). Only the chunks are dropped here: they are what the run is
+        about to rewrite.
+        """
+        file_id = self.get_id_if_exists(file_path)
+
+        if not isinstance(file_path, Path):
+            if file_id is not None:
+                raise ValueError(f"URL {file_path} already indexed.")
+            return self.store_url(file_path), True, False
+
+        if file_id is None:
+            # add record to db
+            return self.store_file(file_path), True, False
+
+        if not reindex:
+            raise ValueError(
+                f"File {file_path.name} already indexed. Please rerun with "
+                "reindex=True to force reindexing."
+            )
+
+        self.delete_chunks(file_id)
+        return file_id, False, True
+
     def stream(
         self,
         file_path: str | Path,
@@ -1160,38 +1199,13 @@ class IndexPipeline(BaseComponent):
         if isinstance(file_path, Path):
             file_path = file_path.resolve()
 
-        file_id = self.get_id_if_exists(file_path)
-        #: whether this attempt is the one that created the source row. Only such a
-        #: row is removed on failure: a row that was already in the index belongs to
-        #: an earlier, successful upload and must never be dropped by a retry.
-        created_here = False
-
-        if isinstance(file_path, Path):
-            if file_id is not None:
-                if not reindex:
-                    raise ValueError(
-                        f"File {file_path.name} already indexed. Please rerun with "
-                        "reindex=True to force reindexing."
-                    )
-                else:
-                    # remove the existing records
-                    yield Document(
-                        f" => Removing old {file_path.name}", channel="debug"
-                    )
-                    self.delete_file(file_id)
-                    file_id = self.store_file(file_path)
-                    created_here = True
-            else:
-                # add record to db
-                file_id = self.store_file(file_path)
-                created_here = True
-        else:
-            if file_id is not None:
-                raise ValueError(f"URL {file_path} already indexed.")
-            else:
-                # add record to db
-                file_id = self.store_url(file_path)
-                created_here = True
+        file_id, created_here, reused_row = self._prepare_source_row(
+            file_path, reindex
+        )
+        if reused_row:
+            yield Document(
+                f" => Re-parsing {Path(file_path).name}", channel="debug"
+            )
 
         # extract the file
         if isinstance(file_path, Path):
@@ -1229,6 +1243,7 @@ class IndexPipeline(BaseComponent):
                 file_name=file_name,
                 error=exc,
                 created_here=created_here,
+                reused_row=reused_row,
                 keep_on_failure=keep_on_failure,
             )
             raise
@@ -1244,6 +1259,7 @@ class IndexPipeline(BaseComponent):
         file_name: str,
         error: Exception,
         created_here: bool,
+        reused_row: bool,
         keep_on_failure: bool,
     ) -> None:
         """Leave no half-indexed file behind when parsing fails.
@@ -1254,12 +1270,15 @@ class IndexPipeline(BaseComponent):
         That is how a missing reader dependency (e.g. ``xlrd`` for ``.xls``, see
         MODIFICATIONS §2.9) felt like "the app cannot read my file" with no way out.
 
-        Two shapes of a failed run are handled here:
+        Three shapes of a failed run are handled here:
 
         - an upload that failed: the row this attempt created is removed, so the
           user can simply upload the file again once the cause is fixed, and the
           error stays what they see (the caller streams it as a ``status: failed``
           event on the ``index`` channel);
+        - a reindex that failed (``reused_row``): the row and the stored upload are
+          the user's own file and must survive, so only the chunks are dropped
+          (MODIFICATIONS §5.37 — deleting the row here also deleted the upload);
         - a repair retry that failed (``keep_on_failure``): the source row is the
           user's upload and stays, but the chunks written before the failure are
           dropped — indexing stores documents first and vectors last, so keeping
@@ -1269,10 +1288,10 @@ class IndexPipeline(BaseComponent):
         logger.error(
             "indexing %s failed (%s): %s", file_name, type(error).__name__, error
         )
-        if not created_here:
+        if not created_here and not reused_row:
             return
         try:
-            if keep_on_failure:
+            if keep_on_failure or reused_row:
                 self.delete_chunks(file_id)
                 logger.info("dropped the partial chunks of %s", file_name)
             else:

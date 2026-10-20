@@ -28,7 +28,7 @@ Document QA with OCR-aware ingestion, page-level citations, and an evaluated ret
 | **检索效果是量出来的**：自建只跑检索层、零 token 成本的评测 | 切块 A/B：Hit@1 **55.6% → 88.9%**；单文件 MRR **0.933**（[§5.7](MODIFICATIONS.md)） |
 | **该拒答时拒答**：分数闸门 + 实体词降档 | 无答案题正确拒答 **91.7%**，可答题误拒 **0%**（[§5.8](MODIFICATIONS.md)） |
 | **表格里的"那一行"能找回来**：中文全文 n-gram + 实体行补齐 | 「某人能评上奖学金吗」从「无法确定」变成引用其综测行；跨文件事实覆盖 **13/16 → 16/16**（[§5.19–§5.21](MODIFICATIONS.md)） |
-| **全栈是自己写的**：FastAPI `/api/v1`（43 个接口，SSE 流式、HttpOnly Cookie、管理员 RBAC）+ React 18 SPA | 445 个后端用例 + 56 个前端单测，离线可跑；首屏 JS **274.40 kB** gzip |
+| **全栈是自己写的**：FastAPI `/api/v1`（43 个接口，SSE 流式、HttpOnly Cookie、管理员 RBAC）+ React 18 SPA | 446 个后端用例 + 56 个前端单测，离线可跑；首屏 JS **274.40 kB** gzip |
 
 > 这是一份 **kotaemon 的改造版**：上游提供 RAG 骨架，本仓库做的是数据入口修复、检索/评测闭环、中文本地化与全栈替换。逐条定位过程与实测见 [MODIFICATIONS.md](MODIFICATIONS.md)。
 
@@ -156,7 +156,7 @@ cd web; npm ci; npm run dev; npm test; npm run typecheck; npm run lint; npm run 
 <summary>每个数字对应的命令（点开）</summary>
 
 ```powershell
-# 全部测试（本机实测 445 passed；前端 56 passed）
+# 全部测试（本机实测 446 passed；前端 56 passed）
 .\.venv\Scripts\python.exe -X utf8 -m pytest libs\kotaemon\tests\test_ocr_pdf_reader.py `
     libs\kotaemon\tests\test_pptx_reader.py libs\ktem\ktem_tests tools\tests `
     -q --ignore=libs\ktem\ktem_tests\test_qa.py

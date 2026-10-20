@@ -24,7 +24,7 @@
 | 测试 | **88 passed**，全部离线（不联网、不调模型） | 对话 14 + 选择器 10 + i18n 44 + MCP 13 + OCR 7 |
 | 体积治理 | 未用模型缓存 + 未使用 torch 清理 | 7.1 GB → **≈2.0 GB**（`MODIFICATIONS.md` §6.3） |
 
-> 本节数字是 2026-10-19 盘点口径；2026-10-20 收尾后的最新实测（445 用例 / 56 前端 / 356 条词条）
+> 本节数字是 2026-10-19 盘点口径；2026-10-20 收尾后的最新实测（446 用例 / 56 前端 / 356 条词条）
 > 见 §1.4 与 README「复现命令」。
 
 ### 1.2 差距（本节是整份路线图的靶子）
@@ -234,7 +234,7 @@ jobs:
 | 数字 | 命令 | 结果 |
 |---|---|---|
 | Hit@1 59.3% / MRR 0.702 | `python tools/eval_retrieval.py --eval tools/eval/zh-points-rules.json --out tools/eval/results.md --json tools/eval/results.json` | `tools/eval/results.json` |
-| 445 passed | `pytest libs/ktem/ktem_tests libs/kotaemon/tests/test_ocr_pdf_reader.py libs/kotaemon/tests/test_pptx_reader.py tools/tests -q --ignore=libs/ktem/ktem_tests/test_qa.py`（Windows 加 `-X utf8`） | 终端输出 / CI |
+| 446 passed | `pytest libs/ktem/ktem_tests libs/kotaemon/tests/test_ocr_pdf_reader.py libs/kotaemon/tests/test_pptx_reader.py tools/tests -q --ignore=libs/ktem/ktem_tests/test_qa.py`（Windows 加 `-X utf8`） | 终端输出 / CI |
 | 正文 209 → 2322 字符 | `python tools/reindex_corpus.py --match 积分细则` 后读 Source.note | 数据库 `ktem_app_data/user_data/sql.db` |
 | 356 条词条 | `python -m ktem.utils.i18n stats --language zh` | 终端输出 |
 

@@ -2843,3 +2843,46 @@ loader 依赖缺失、磁盘写失败），文件就从列表消失且无法找�
 单独排期：`repair.py` 的多索引线程共用一个 `repair_src` 目录（会 rmtree 掉别的线程正在解析的副本）、
 `_dry_index` 把"合法 0-chunk 文件"当成重建中断（导致每次点同一模型都全库重建）。
 
+### 5.38 默认模型守卫误伤：同一个 job 第二次跑测试必红（2026-10-20，回到 §5.35/§5.37）
+
+**现象**：GitHub Actions 的 `tests` badge 变红，#15–#18 连续失败。但红点不在测试内容：第 6 步
+`Run tests` 是 **445 passed**，红在第 7 步「Coverage of the added modules」——它在同一个 job、
+同一个 `ktem_app_data/user_data/sql.db` 上再跑一遍 `libs/ktem/ktem_tests`，其中
+`test_llm_crud_round_trip` 与 `test_setting_a_default_model_moves_the_flag_then_restores_it`
+报 `AssertionError: {"detail":"名称已存在"}`（`assert 400 == 201`）。
+
+**定位**（CI 日志 + 本机空池复现）：
+
+- 第 6 步跑完，库里残留 `test_api_llm`（default=1）与 `test_api_llm_renamed`；第 7 步再跑同一套
+  用例时 `POST /api/v1/vendors/llms` 撞名 → 400。
+- 残留的源头是 §5.37 加的 409 守卫：[api/vendors.py](libs/ktem/ktem/api/vendors.py) 的
+  `_is_default_model()` 在没有行标 `default` 时会用 `manager.get_default_name()` 兜底，而后者在
+  "无默认"时**随机挑一个模型**。于是池里唯一的普通模型也被判成"当前默认"：删除返回 409
+  「该模型是当前默认模型，请先切换」，可池里根本没有别的模型可切。
+- 测试的 `finally` 清理又吞掉了 409（`_delete()` 不看响应码），行就留在库里。
+- 为什么本地一直绿：本地 `.env` 有真 `DEEPSEEK_API_KEY`，`deepseek` 被 `sync_presets()` 播成
+  **显式默认**，`before` 非空，清理能先把默认切回去再删；CI 没有 `.env`，key 是占位符 →
+  不播任何预设 → **模型池是空的**，正好走随机兜底分支。
+
+**实现**：
+
+- [api/vendors.py](libs/ktem/ktem/api/vendors.py)：`_is_default_model()` **只认行上的 `default` 标记**，
+  删掉 `get_default_name()` 兜底。显式默认行仍然删除返回 409（原规则不变）；空池/无默认时按普通行
+  处理，不再出现"请先切换却没有可切换目标"，同一次删除也不再取决于随机数。
+- [test_api_vendors.py](libs/ktem/ktem_tests/test_api_vendors.py)：`_delete()` 断言 204/404（清理失败
+  立刻暴露，不再静默）；抽出 `_restore_defaults()`；`test_setting_a_default_model_moves_the_flag_then_restores_it`
+  在没有原默认时先 `PATCH {"default": false}` 再删；新增回归测试
+  `test_a_model_is_not_protected_when_no_default_is_marked`。
+
+**实测**（本机用独立 `KH_APP_DATA_DIR` + 占位 `DEEPSEEK_API_KEY` 模拟 CI 空池）：
+
+| 项目 | 结果 |
+|---|---|
+| 修前复现 | 第 1 次 `10 passed`，但库里残留 `[('test_api_llm_renamed', 0), ('test_api_llm', 1)]`；第 2 次（同库）**2 failed**，报错与 CI 日志逐字一致 |
+| 修后 | 第 1 次 `11 passed`、`llm_table []`；第 2 次（同库）`11 passed` |
+| 模拟 CI 两步 | `pytest libs/ktem/ktem_tests ...`（CI 第 6 步命令）**446 passed** → coverage 命令重跑 **367 passed**，`coverage report` 退出码 0 |
+| 前端 | 未改动 |
+
+**注意**：守卫语义收窄后，"删掉池里最后一个模型"会把模型池删空（等于全新安装状态）。§5.37 P1 表里
+「默认模型删除返回 409」仍成立，但"当前默认"的判定以本节为准：只看 `default` 标记，不看随机兜底。
+

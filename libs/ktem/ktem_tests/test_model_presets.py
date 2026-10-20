@@ -151,6 +151,34 @@ def test_embedding_presets_follow_the_same_rule(tmp_path):
     assert rows["fast_embed"].default is True
 
 
+def test_sync_does_not_create_a_second_default(tmp_path):
+    """The pool must keep exactly one default: seeding never adds another.
+
+    The seeded preset carries ``default: True``, but the user already picked a
+    default; respecting the preset would leave two rows flagged as default.
+    """
+    engine = create_engine(f"sqlite:///{tmp_path / 'presets.db'}")
+    LLMTable.__table__.create(bind=engine)
+    presets = {"preset": {"spec": chat_openai("sk-real"), "default": True}}
+
+    with Session(engine) as session:
+        session.add(
+            LLMTable(
+                name="user_model",
+                spec=chat_openai("sk-user", "gpt-4o"),
+                default=True,
+            )
+        )
+        session.commit()
+        report = sync_presets(LLMTable, presets, session=session)
+
+    assert report["seeded"] == ["preset"]
+    with Session(engine) as session:
+        rows = {row.name: row for row in session.query(LLMTable).all()}
+    defaults = [name for name, row in rows.items() if row.default]
+    assert defaults == ["user_model"], "the existing default wins"
+
+
 def test_embedding_manager_syncs_presets_on_startup(monkeypatch):
     """The embedding manager must call the same reconciliation as the LLM one.
 

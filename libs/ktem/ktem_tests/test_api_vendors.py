@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import uuid
+
 from fastapi.testclient import TestClient
 
 TEST_LLM = "test_api_llm"
@@ -190,3 +192,75 @@ def test_only_admins_can_change_resources(logged_in):
 def test_vendor_endpoints_require_a_session(client):
     assert client.get("/api/v1/vendors").status_code == 401
     assert client.get("/api/v1/vendors/llms").status_code == 401
+
+
+def test_mcp_config_is_only_listed_for_admins(logged_in):
+    """A server config can carry an API key, so a plain account only sees names."""
+    name = f"test_mcp_list_{uuid.uuid4().hex[:8]}"
+    created = logged_in.post(
+        "/api/v1/vendors/mcp",
+        json={
+            "name": name,
+            "config": {"command": "echo", "args": ["hi"], "api_key": "secret"},
+        },
+    )
+    assert created.status_code == 201, created.text
+    user = logged_in.post(
+        "/api/v1/users",
+        json={
+            "username": f"mcp_plain_{uuid.uuid4().hex[:8]}",
+            "password": "Abcd1234!",
+        },
+    ).json()
+    try:
+        admin_rows = {
+            row["name"]: row
+            for row in logged_in.get("/api/v1/vendors/mcp").json()["items"]
+        }
+        assert admin_rows[name]["config"]["command"] == "echo"
+
+        other = TestClient(logged_in.app)
+        login = other.post(
+            "/api/v1/auth/login",
+            json={"username": user["username"], "password": "Abcd1234!"},
+        )
+        assert login.status_code == 200, login.text
+        rows = {
+            row["name"]: row
+            for row in other.get("/api/v1/vendors/mcp").json()["items"]
+        }
+        assert set(rows[name]) == {"name"}, "non-admins must not receive the config"
+    finally:
+        logged_in.delete(f"/api/v1/users/{user['id']}")
+        logged_in.delete(f"/api/v1/vendors/mcp/{name}")
+
+
+def test_deleting_the_default_model_is_refused(logged_in, monkeypatch):
+    """Deleting what the app runs on would leave the pool without a fallback."""
+    from ktem.services import vendors as service
+
+    deleted: list[str] = []
+
+    class FakeManager:
+        def info(self):
+            return {
+                "test-default-emb": {
+                    "name": "test-default-emb",
+                    "spec": {},
+                    "default": True,
+                }
+            }
+
+        def get_default_name(self):
+            return "test-default-emb"
+
+        def delete(self, name):
+            deleted.append(name)
+
+    monkeypatch.setattr(service, "_manager", lambda kind: FakeManager())
+
+    response = logged_in.delete("/api/v1/vendors/embeddings/test-default-emb")
+
+    assert response.status_code == 409, response.text
+    assert "默认模型" in response.json()["detail"]
+    assert deleted == [], "the default model must not reach the manager"

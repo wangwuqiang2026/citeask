@@ -104,6 +104,10 @@ def sync_presets(
     context = nullcontext(session) if session is not None else Session(engine)
     with context as sess:
         rows = {row.name: row for row in sess.execute(select(table)).scalars()}
+        # The pool must keep exactly one default. When the user already picked a
+        # model, a preset carrying ``default: True`` is seeded as a normal row so
+        # the pool never ends up with two defaults.
+        has_default = any(bool(row.default) for row in rows.values())
         for name, preset in (presets or {}).items():
             spec = (preset or {}).get("spec") or {}
             configured = is_configured(spec)
@@ -118,7 +122,8 @@ def sync_presets(
                     table(
                         name=name,
                         spec=spec,
-                        default=bool((preset or {}).get("default", False)),
+                        default=bool((preset or {}).get("default", False))
+                        and not has_default,
                     )
                 )
                 report["seeded"].append(name)

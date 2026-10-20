@@ -62,8 +62,14 @@ def read_catalog(_: dict = Depends(current_user)) -> dict:
 
 
 @router.get("/{kind}")
-def list_entries(kind: str, _: dict = Depends(current_user)) -> dict:
-    return {"items": service.list_entries(_check_kind(kind))}
+def list_entries(kind: str, user: dict = Depends(current_user)) -> dict:
+    items = service.list_entries(_check_kind(kind))
+    if kind == "mcp" and not user.get("admin"):
+        # An MCP server config is plain JSON that can carry credentials (env
+        # tokens, API keys). Only the name is needed to render the list for
+        # everybody else; the admin-only detail endpoint still exposes the rest.
+        items = [{"name": item["name"]} for item in items]
+    return {"items": items}
 
 
 @router.get("/{kind}/{name}")
@@ -118,12 +124,31 @@ def update_entry(
         raise _translate(exc) from exc
 
 
+def _is_default_model(kind: str, name: str) -> bool:
+    """Whether ``name`` is the model the app currently runs on by default."""
+    if kind == "mcp":
+        return False
+    manager = service._manager(kind)  # noqa: SLF001 - same package, one manager
+    info = manager.info()
+    if not info:
+        return False
+    if bool((info.get(name) or {}).get("default")):
+        return True
+    try:
+        return manager.get_default_name() == name
+    except Exception:  # noqa: BLE001 - an empty pool has no default to compare
+        return False
+
+
 @router.delete("/{kind}/{name}", status_code=204)
 def delete_entry(
     kind: str, name: str, _: dict = Depends(admin_required)
 ) -> Response:
+    kind = _check_kind(kind)
+    if _is_default_model(kind, name):
+        raise HTTPException(status_code=409, detail="该模型是当前默认模型，请先切换")
     try:
-        service.delete(_check_kind(kind), name)
+        service.delete(kind, name)
     except (ValueError, KeyError) as exc:
         raise _translate(exc) from exc
     return Response(status_code=204)

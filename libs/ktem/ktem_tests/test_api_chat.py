@@ -6,6 +6,8 @@ import pytest
 from kotaemon.base import Document
 
 from ktem.services.chat import ChatService
+from ktem.services.conversations import ConversationService
+from ktem.services.settings import SettingsService
 
 EVENT_NAMES = (
     "event: start",
@@ -117,6 +119,64 @@ def test_stream_reports_pipeline_errors(monkeypatch, logged_in):
     detail = logged_in.get(f"/api/v1/conversations/{conversation_id}").json()
     assert detail["messages"] == [], "a failed turn must not be persisted"
     logged_in.delete(f"/api/v1/conversations/{conversation_id}")
+
+
+def test_a_cancelled_turn_is_not_persisted(monkeypatch, application):
+    """Pressing "stop" must end the turn without saving it.
+
+    The worker runs the pipeline in a thread and keeps producing after the client
+    disconnects; without an explicit cancellation signal it also persisted the
+    abandoned half-answer. The stream must end silently: no ``done``, no saved
+    turn, and no follow-up events (title/suggestions).
+    """
+    import threading
+
+    cancel = threading.Event()
+
+    class CancellingPipeline:
+        """Streams one token, then the user presses stop."""
+
+        def stream(self, message, conv_id, history):
+            yield Document(channel="chat", content="第一段")
+            cancel.set()
+            yield Document(channel="chat", content="不该出现")
+
+    monkeypatch.setattr(
+        ChatService,
+        "build_pipeline",
+        lambda self, *args, **kwargs: (CancellingPipeline(), {}, "simple"),
+    )
+    monkeypatch.setattr(ChatService, "_scoped_ids", lambda self, *args, **kwargs: [])
+    monkeypatch.setattr(ChatService, "_suggest_name", staticmethod(lambda *a, **k: None))
+    monkeypatch.setattr(ChatService, "_suggestions", lambda self, *a, **k: [])
+    monkeypatch.setattr(
+        ConversationService,
+        "history_for_pipeline",
+        lambda self, *args, **kwargs: ([], {"app": {"regen": False}}),
+    )
+    monkeypatch.setattr(SettingsService, "load", lambda self, *args, **kwargs: {})
+
+    persisted = []
+    monkeypatch.setattr(
+        ConversationService,
+        "persist_turn",
+        lambda self, **kwargs: persisted.append(kwargs),
+    )
+
+    service = ChatService(application)
+    events = list(
+        service.stream(
+            conversation_id="conv-cancel",
+            user={"id": 1},
+            message="hi",
+            cancel=cancel,
+        )
+    )
+    names = [event["event"] for event in events]
+    assert "done" not in names, "a cancelled turn must not report completion"
+    assert "token" in names, "the token produced before the stop should still stream"
+    assert persisted == [], "a cancelled turn must not be written to the database"
+
 
 
 def test_suggest_name_uses_answer_language(monkeypatch):

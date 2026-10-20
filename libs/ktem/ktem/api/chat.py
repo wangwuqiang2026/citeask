@@ -64,6 +64,9 @@ def send_message(
     async def events() -> AsyncIterator[str]:
         queue: asyncio.Queue = asyncio.Queue()
         loop = asyncio.get_running_loop()
+        # The pipeline runs in a worker thread; this event tells it to stop when
+        # the client goes away, so an abandoned turn is not persisted.
+        cancel = threading.Event()
 
         def worker() -> None:
             try:
@@ -75,6 +78,7 @@ def send_message(
                     overrides=body.overrides,
                     regenerate=body.regenerate,
                     command=body.command,
+                    cancel=cancel,
                 ):
                     loop.call_soon_threadsafe(queue.put_nowait, event)
             except Exception as exc:  # noqa: BLE001 - reported to the client
@@ -87,20 +91,30 @@ def send_message(
 
         threading.Thread(target=worker, name="ktem-chat", daemon=True).start()
 
-        while True:
-            try:
-                item = await asyncio.wait_for(queue.get(), timeout=KEEP_ALIVE_SECONDS)
-            except asyncio.TimeoutError:
-                if await request.is_disconnected():
-                    break
-                yield ": keep-alive\n\n"
-                continue
+        try:
+            while True:
+                try:
+                    item = await asyncio.wait_for(
+                        queue.get(), timeout=KEEP_ALIVE_SECONDS
+                    )
+                except asyncio.TimeoutError:
+                    if await request.is_disconnected():
+                        cancel.set()
+                        break
+                    yield ": keep-alive\n\n"
+                    continue
 
-            if item is None:
-                break
-            if await request.is_disconnected():
-                break
-            yield _sse(item["event"], item["data"])
+                if item is None:
+                    break
+                if await request.is_disconnected():
+                    cancel.set()
+                    break
+                yield _sse(item["event"], item["data"])
+        finally:
+            # Also covers the generator being closed without a keep-alive/timeout:
+            # whatever the reason the client stopped reading, the worker must not
+            # commit the turn it is still producing.
+            cancel.set()
 
     return StreamingResponse(
         events(),

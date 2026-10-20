@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 import uuid
 from copy import deepcopy
 from typing import Any, Iterator
@@ -218,8 +219,16 @@ class ChatService:
         overrides: dict | None = None,
         regenerate: bool = False,
         command: str | None = None,
+        cancel: threading.Event | None = None,
     ) -> Iterator[dict]:
-        """Yield ``{"event", "data"}`` dicts for one question."""
+        """Yield ``{"event", "data"}`` dicts for one question.
+
+        ``cancel`` is set by the HTTP layer when the client disconnects or the
+        stream is closed. It runs the pipeline in a worker thread, so the turn can
+        outlive the request; once cancelled, the stream stops without persisting the
+        abandoned half-answer (and without the ``done``/``title``/``suggestions``
+        events that belong to a completed turn).
+        """
         message = (message or "").strip()
         selection = selection or {}
         overrides = overrides or {}
@@ -272,6 +281,10 @@ class ChatService:
         plot: Any = None
         try:
             for response in pipeline.stream(llm_query, conversation_id, pairs):
+                # The worker thread is not stopped by the client disconnecting: stop
+                # emitting as soon as the request is cancelled (nothing is persisted).
+                if cancel is not None and cancel.is_set():
+                    return
                 if not isinstance(response, Document):
                     continue
                 channel = response.channel
@@ -315,6 +328,9 @@ class ChatService:
                 "reasoning.lang", "en"
             )
             new_name = self._suggest_name(pairs + [[message, text]], language)
+
+        if cancel is not None and cancel.is_set():
+            return
 
         try:
             self._conversations.persist_turn(

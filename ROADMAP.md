@@ -25,7 +25,7 @@
 | 体积治理 | 未用模型缓存 + 未使用 torch 清理 | 7.1 GB → **≈2.0 GB**（`MODIFICATIONS.md` §6.3） |
 
 > 本节数字是 2026-10-19 盘点口径；2026-10-20 收尾后的最新实测（445 用例 / 56 前端 / 356 条词条）
-> 见 §1.4 与 README「数字自证」。
+> 见 §1.4 与 README「复现命令」。
 
 ### 1.2 差距（本节是整份路线图的靶子）
 
@@ -57,7 +57,7 @@
 | A2 CI 纳入 `ktem_tests` + 工具测试 + 覆盖率报告 | ✅ 完成 | `.github/workflows/tests.yaml`；Python **445 例** + 前端 **56 例**，最新 run success |
 | A3 一键启动脚本 | ✅ 完成 | `start.bat`（双击入口，失败留窗 + 日志）+ `scripts/bootstrap_windows.ps1`（默认跳过 uv sync、`-ForceSync` 强制、端口就绪后自动开浏览器） |
 | A4 演示素材 | ◐ 本次执行中 | 已加 `KH_APP_DATA_DIR` 隔离 demo 数据；截图/GIF 用仓库自带虚构语料生成，不再拍真实文件 |
-| A5 数字自证表 | ✅ 完成 | README「数字自证」一节；已补 445/56、67 API、43 接口、274.40 kB 与公开 9 题 |
+| A5 数字自证表 | ✅ 完成 | README「复现命令」一节；已补 445/56、67 API、43 接口、274.40 kB 与公开 9 题 |
 | B1 评测协议升级 | ◐ 工具与公开 9 题完成，私有题库仍 27 题 | `--category` / `--scope` / `--rerank` / `--fail-under-hit1` / `--abstain-term-floor`、退出码 0/1/2、`tools/eval/README.md`、`tools/tests/test_eval_retrieval.py`；公开 9 题实测 Hit@1 **87.5%** / MRR **0.900**（`results-public.*`），私有 27 题不可由外部复现 |
 | B2 重排闭环 | ✅ 完成（本地词法重排，无模型） | 配置但不可用时自动回退；全库 Hit@3 85.2%→**88.9%**、MRR +0.015，P50 +24%（§5.9） |
 | B3 切块 A/B | ✅ 完成 | 512/64 默认；**Hit@1 55.6% → 88.9%、MRR 0.707 → 0.933**（§5.7） |

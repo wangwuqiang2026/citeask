@@ -118,3 +118,24 @@ def test_a_bare_non_string_value_is_one_selection() -> None:
 
 def test_the_disabled_mode_scopes_nothing() -> None:
     assert resolve_selection(SELECTOR_MODE_DISABLED, ["f1"], ALL_FILES) == []
+
+
+def test_an_id_outside_the_users_files_is_ignored() -> None:
+    """A picked id the user cannot see must not widen the retrieval scope.
+
+    The dropdown's ids come straight from the client, and the retriever scopes
+    retrieval with ``source_id.in_(...)`` without any per-user filter, so an id
+    that is not among the user's files would otherwise let the chat search
+    someone else's private document.
+    """
+    assert (
+        resolve_selection(SELECTOR_MODE_SELECT, ["someone-elses"], ALL_FILES) == ALL_FILES
+    )
+
+
+def test_the_intersection_keeps_only_the_users_files() -> None:
+    """Visible picks survive, foreign ones are dropped silently."""
+    assert (
+        resolve_selection(SELECTOR_MODE_SELECT, ["f2", "someone-elses"], ALL_FILES)
+        == ["f2"]
+    )

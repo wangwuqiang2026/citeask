@@ -68,13 +68,21 @@ def resolve_selection(
     An empty selection therefore falls back to every file, which is also what the user
     expected before the refresh.
 
+    The dropdown values come from the client, while ``all_file_ids`` is the set of
+    files the current user may see. Only the intersection is searched: the retriever
+    applies ``source_id.in_(...)`` without a per-user filter, so accepting a foreign
+    id would expose another user's private document. An intersection that ends up
+    empty falls back to every visible file, the same tolerance the empty selection
+    gets (a stale id after the file list changed must not silently disable retrieval).
+
     Args:
         mode: the selector's mode (``all`` / ``select`` / ``disabled``).
         selected: the dropdown value; may be ``None``, a string or a list.
         all_file_ids: every file id the current user owns.
 
     Returns:
-        The file ids to scope the retrieval to (empty only for ``disabled``).
+        The file ids to scope the retrieval to (empty only for ``disabled``; every
+        id is guaranteed to be in ``all_file_ids``).
     """
     if mode == SELECTOR_MODE_DISABLED:
         return []
@@ -90,4 +98,6 @@ def resolve_selection(
     else:
         chosen = [selected]
 
+    allowed = set(all_file_ids)
+    chosen = [item for item in chosen if item in allowed]
     return chosen if chosen else list(all_file_ids)
